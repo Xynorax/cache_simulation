@@ -25,11 +25,12 @@ simulations[3] = [2 ** 18, 2 ** 13, 2 ** 6, 2 ** 3, "LRU", "WB"]
 simulations[4] = [2 ** 18, 2 ** 13, 2 ** 6, 2 ** 4, "LRU", "WB"]
 simulations[5] = [2 ** 18, 2 ** 13, 2 ** 6, 2 ** 5, "LRU", "WB"]
 simulations[6] = [2 ** 18, 2 ** 13, 2 ** 6, 2 ** 6, "LRU", "WB"]
+
+
+# Initializations
 Execution_Times = [0] * No_of_simulations  # Initialize an array with values for all simulations
 cache_hits_end = [0] * No_of_simulations
 cache_misses_end = [0] * No_of_simulations
-
-# Initializations
 hits = 0
 misses = 0
 write_hits = 0
@@ -49,6 +50,7 @@ DATA_MEM_SIZE = mem_size / 2
 TREE_DATA_SIZE = 8  # In bytes
 DRAM_ACCESS_TIME = 250  # in cycles
 
+# Calculated parameters
 NUM_DATA_BLOCKS = DATA_MEM_SIZE // block_size
 TREE_LEVELS = int(
     (math.ceil(math.log2(NUM_DATA_BLOCKS / TREE_ROOTS)) + TREE_ARITY_BITS - 1) / math.ceil(math.log2(TREE_ARITY)))
