@@ -54,7 +54,12 @@ DRAM_ACCESS_TIME = 250  # in cycles
 NUM_DATA_BLOCKS = DATA_MEM_SIZE // block_size
 TREE_LEVELS = int(
     (math.ceil(math.log2(NUM_DATA_BLOCKS / TREE_ROOTS)) + TREE_ARITY_BITS - 1) / math.ceil(math.log2(TREE_ARITY)))
-TREE_START_ADDRESS = MEMORY_START_ADDR + DATA_MEM_SIZE  # Must have the start addresses of the roots, currently 1 root supported
-tree_level_address = TREE_START_ADDRESS
+TREE_START_ADDRESS = MEMORY_START_ADDR + DATA_MEM_SIZE
 TREE_SIZE = (((TREE_ARITY ** TREE_LEVELS) - 1) // (TREE_ARITY - 1)) * TREE_ARITY * TREE_DATA_SIZE;
 IND_TREE_SIZE = DATA_MEM_SIZE // TREE_ROOTS
+tree_start_addresses = [0] * TREE_ROOTS
+tree_start_addresses[0] = TREE_START_ADDRESS
+vLastStart = TREE_START_ADDRESS
+for x in range(1, len(tree_start_addresses)):
+    vLastStart = vLastStart + TREE_SIZE
+    tree_start_addresses[x] = vLastStart;

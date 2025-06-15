@@ -160,17 +160,14 @@ class MemoryAccess:
         # 1. Compute root index (which tree protects this address)
         root_index = int((cpu_address - MEMORY_START_ADDR) // IND_TREE_SIZE)
 
-        # 2. Compute root address (for verification)
-        root_addr = int(TREE_START_ADDRESS + root_index * TREE_SIZE)
-
-        # 3. Compute leaf node index (data block number within the tree)
+        # 2 . Compute leaf node index (data block number within the tree)
         tree_offset = int(root_index * IND_TREE_SIZE)
         dataNodeNum = int((cpu_address - MEMORY_START_ADDR - tree_offset) // block_size)
         global tree_level_address
-        # 4. Compute tree node offset for the current level
+
         if current_level == 0:
-            treeNodeAddr = root_addr
-            tree_level_address = TREE_START_ADDRESS
+            treeNodeAddr = int(tree_start_addresses[root_index])
+            tree_level_address = tree_start_addresses[root_index]
         else:
             shift = TREE_ARITY_BITS * (TREE_LEVELS - 1 - current_level)
             node_index = dataNodeNum >> shift
