@@ -202,8 +202,8 @@ def benchmark_manual():  ##Benchmark 2 - Manually inputed values
 
 
 def benchmark_fir():  # Benchmark 3 FIR filter
-    N = 50  # Order of the filter
-    input_length = 40000
+    N = 3  # Order of the filter
+    input_length = 3
     input_array = [random.randint(0, 100) for _ in range(input_length)]
     coeffs = [random.randint(0, 100) for _ in range(N)]  # N-tap filter
     N = len(coeffs)
@@ -211,13 +211,13 @@ def benchmark_fir():  # Benchmark 3 FIR filter
         MemoryAccess("write", i, coeffs[i])
     for i in range(input_length):
         MemoryAccess("write", i + N, input_array[i])
-    for j in range(input_length - N + 1):
+    for j in range(input_length + 1):
         for i in range(N):
             MemoryAccess("read", i)
-            MemoryAccess("read", i + j + N)
+            if ((i + j) - N >= 0):
+                MemoryAccess("read", i + N)
         MemoryAccess("write", input_length + N + j, 0)
     initiate_command("stats")
-
 
 def benchmark_seq_access():  # Benchmark 4 Sequential access
     access_times = 25700
