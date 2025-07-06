@@ -3,8 +3,10 @@ from Parameters import *
 from benchmarks import *
 from cache import Cache
 from memory import Memory
+from trace_extractor import parse_champsim_trace_line_fast
+from translation import va_translation
 
-
+traced = False
 def read(address, memory, cache):
     """Read a byte from cache."""
     cache_block = cache.read(address)
@@ -14,7 +16,7 @@ def read(address, memory, cache):
         hits += 1
         global cache_hit
         cache_hit = True  # Set as true to stop reading parent nodes+
-        execution_time = execution_time + cache._mapping_pol * 0.1  # Add execution time depending on associativity (in cycles)
+        execution_time = execution_time + cache._mapping_pol * 0.4  # Add execution time depending on associativity (in cycles)
     else:
         block = memory.get_block(address)
         victim_info = cache.load(address, block)
@@ -202,8 +204,8 @@ def benchmark_manual():  ##Benchmark 2 - Manually inputed values
 
 
 def benchmark_fir():  # Benchmark 3 FIR filter
-    N = 3  # Order of the filter
-    input_length = 3
+    N = 40  # Order of the filter
+    input_length = 500
     input_array = [random.randint(0, 100) for _ in range(input_length)]
     coeffs = [random.randint(0, 100) for _ in range(N)]  # N-tap filter
     N = len(coeffs)
@@ -260,6 +262,24 @@ def benchmark_binary_search():  # Benchmark 6 binary search
             print(f"FAIL: Target {random_address} not found after {attempts} attempts. Search space exhausted.")
 
 
+def benchmark_trace():
+    TRACE_FILE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.champsimtrace"
+    MAX_INSTRUCTIONS = 5000000
+    BATCH = 10000
+    for i in range(0, MAX_INSTRUCTIONS, BATCH):
+        instr_batch = parse_champsim_trace_line_fast(TRACE_FILE_PATH, i, BATCH)
+        for instr in instr_batch:
+            for k in range(2):
+                dest_addr = instr[9 + k]
+                if dest_addr != 0:  # Skip if no destination memory
+                    dest_addr = va_translation(dest_addr)
+                    MemoryAccess("read", dest_addr)
+            for k in range(4):
+                src_addr = instr[11 + k]
+                if src_addr != 0:  # Skip if 0
+                    src_addr = va_translation(src_addr)
+                    MemoryAccess("write", src_addr)
+
 for k in range(len(simulations)):
     execution_time = 0  # Reset execution time for each simulation
     global hits
@@ -278,17 +298,21 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_seq_read()
+    benchmark_trace()
+
     Execution_Times[k] = execution_time
     cache_hits_end[k] = hits
     cache_misses_end[k] = misses
+    hit_percent[k] = hits / (hits + misses) if (hits + misses) != 0 else 0.0
 
 print(simulations)
 print("Execution times:")
 min_value = min(Execution_Times)
-Execution_Times = [time / min_value for time in Execution_Times]
+Execution_Times = [time / min_value for time in Execution_Times] if (min_value) != 0 else 0.0
 print(Execution_Times)
 print("Cache hits:")
 print(cache_hits_end)
 print("Cache misses:")
 print(cache_misses_end)
+print("Hit percent:")
+print(hit_percent)
