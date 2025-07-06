@@ -13,7 +13,7 @@ class Cache:
     LFU = "LFU"
     FIFO = "FIFO"
     RAND = "RAND"
-
+    RLR = "RLR"
     # Mapping policies
     WRITE_BACK = "WB"
     WRITE_THROUGH = "WT"
@@ -56,7 +56,8 @@ class Cache:
             if (self._replace_pol == Cache.LRU or
                     self._replace_pol == Cache.LFU):
                 self._update_use(line, set)
-
+            if (self._replace_pol == Cache.RLR):
+                self._update_rlr(line, set)
         return line.data if line else line
 
     def load(self, address, data):
@@ -87,6 +88,19 @@ class Cache:
         elif self._replace_pol == Cache.RAND:
             index = random.randint(0, self._mapping_pol - 1)
             victim = set[index]
+        elif self._replace_pol == Cache.RLR:
+            victim = set[0]
+            for index in range(len(set)):
+                if set[index].age_counter > 2 * set[index].preuse_distance:
+                    set[index].age_priority = 0
+                else:
+                    set[index].age_priority = 1
+                if (set[index].hit + 8 * set[index].age_priority) <= (victim.hit + 8 * victim.age_priority):
+                    victim = set[index]
+            victim.hit = 0
+            victim.age_priority = 0
+            victim.age_counter = 0
+            victim.preuse_distance = 0
 
         # Store victim info if modified
         if victim.modified:
@@ -97,7 +111,6 @@ class Cache:
         victim.valid = 1
         victim.tag = tag
         victim.data = data
-
         return victim_info
 
     def write(self, address, byte):
@@ -125,7 +138,8 @@ class Cache:
             if (self._replace_pol == Cache.LRU or
                     self._replace_pol == Cache.LFU):
                 self._update_use(line, set)
-
+            if (self._replace_pol == Cache.RLR):
+                self._update_rlr(line, set)
         return True if line else False
 
     def print_section(self, start, amount):
@@ -206,3 +220,10 @@ class Cache:
                         other.use -= 1
         elif self._replace_pol == Cache.LFU:
             line.use += 1
+
+    def _update_rlr(self, line, set):
+        line.preuse_distance = line.age_counter
+        for index in range(len(set)):
+            set[index].age_counter += 1
+        line.age_counter = 0
+        line.hit = 1
