@@ -26,7 +26,7 @@ simulations[0] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 2, "LRU", "WB"]
 
 # simulations[5] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 0, "RLR", "WB"]
 # simulations[6] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 1, "RLR", "WB"]
-simulations[1] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 2, "RLR", "WB"]
+# simulations[1] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 2, "RLR", "WB"]
 # simulations[8] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 3, "RLR", "WB"]
 # simulations[9] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 4, "RLR", "WB"]
 

@@ -4,9 +4,9 @@ from benchmarks import *
 from cache import Cache
 from memory import Memory
 from trace_extractor import parse_champsim_trace_line_fast
-from translation import va_translation
+from translation import *
 
-traced = False
+
 def read(address, memory, cache):
     """Read a byte from cache."""
     cache_block = cache.read(address)
@@ -196,8 +196,9 @@ def benchmark_manual():  ##Benchmark 2 - Manually inputed values
     size = 2  # array length
     array = [123]  # list(range(0, 10, 1))
     for i in range(len(array)):
-        MemoryAccess("read", array[i])
-        MemoryAccess("write", array[i], )
+        MemoryAccess("read", 8191)
+        MemoryAccess("read", 0)
+        MemoryAccess("read", 4000)
     initiate_command("stats")
     # initiate_command("printmem 0 20")
     # initiate_command("printcache 0 20")
@@ -263,22 +264,26 @@ def benchmark_binary_search():  # Benchmark 6 binary search
 
 
 def benchmark_trace():
+    instructions_number = 0
     TRACE_FILE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.champsimtrace"
-    MAX_INSTRUCTIONS = 5000000
-    BATCH = 10000
+    MAX_INSTRUCTIONS = 50000000
+    BATCH = 5000000
     for i in range(0, MAX_INSTRUCTIONS, BATCH):
+        print(i)
         instr_batch = parse_champsim_trace_line_fast(TRACE_FILE_PATH, i, BATCH)
         for instr in instr_batch:
+            instructions_number += 1
+            print(f"Instruction number:{instructions_number}")
             for k in range(2):
                 dest_addr = instr[9 + k]
                 if dest_addr != 0:  # Skip if no destination memory
                     dest_addr = va_translation(dest_addr)
-                    MemoryAccess("read", dest_addr)
+                    MemoryAccess("write", dest_addr)
             for k in range(4):
                 src_addr = instr[11 + k]
                 if src_addr != 0:  # Skip if 0
                     src_addr = va_translation(src_addr)
-                    MemoryAccess("write", src_addr)
+                    MemoryAccess("read", src_addr)
 
 for k in range(len(simulations)):
     execution_time = 0  # Reset execution time for each simulation
@@ -298,8 +303,8 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_trace()
-
+    # benchmark_trace()
+    benchmark_manual()
     Execution_Times[k] = execution_time
     cache_hits_end[k] = hits
     cache_misses_end[k] = misses
