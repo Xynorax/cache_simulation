@@ -195,12 +195,10 @@ def benchmark_random_reads():  ##Benchmark 1 - random read access
 def benchmark_manual():  ##Benchmark 2 - Manually inputed values
     size = 2  # array length
     array = [123]  # list(range(0, 10, 1))
-    for i in range(len(array)):
-        MemoryAccess("read", 8191)
-        MemoryAccess("read", 0)
-        MemoryAccess("read", 4000)
+    MemoryAccess("read", 1)
+    MemoryAccess("read", (mem_size // 4) - 2)
     initiate_command("stats")
-    # initiate_command("printmem 0 20")
+    # initiate_command("printpymem 0 20")
     # initiate_command("printcache 0 20")
 
 
@@ -264,9 +262,10 @@ def benchmark_binary_search():  # Benchmark 6 binary search
 
 
 def benchmark_trace():
+    mm = MemoryManager()
     instructions_number = 0
     TRACE_FILE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.champsimtrace"
-    MAX_INSTRUCTIONS = 50000000
+    MAX_INSTRUCTIONS = 5000000
     BATCH = 5000000
     for i in range(0, MAX_INSTRUCTIONS, BATCH):
         print(i)
@@ -277,12 +276,12 @@ def benchmark_trace():
             for k in range(2):
                 dest_addr = instr[9 + k]
                 if dest_addr != 0:  # Skip if no destination memory
-                    dest_addr = va_translation(dest_addr)
+                    dest_addr = mm.translate_virtual_to_physical(dest_addr)
                     MemoryAccess("write", dest_addr)
             for k in range(4):
                 src_addr = instr[11 + k]
                 if src_addr != 0:  # Skip if 0
-                    src_addr = va_translation(src_addr)
+                    src_addr = mm.translate_virtual_to_physical(src_addr)
                     MemoryAccess("read", src_addr)
 
 for k in range(len(simulations)):

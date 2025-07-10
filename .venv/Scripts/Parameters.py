@@ -1,7 +1,7 @@
 import math
 
 MEMORY = 24  # MEMORY - size of main memory in 2^N bytes
-CACHE = 12  # CACHE - size of the cache in 2^N bytes
+CACHE = 10  # CACHE - size of the cache in 2^N bytes
 BLOCK = 6  # BLOCK - size of a block of memory in 2^N bytes
 MAPPING = 2  # MAPPING - mapping policy for cache in 2^N ways
 
@@ -20,7 +20,7 @@ simulations = {}
 # Memory_size, Cache_size, Block_size, mapping, replace_policy, write_policy
 # simulations[0] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 0, "LRU", "WB"]
 # simulations[1] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 1, "LRU", "WB"]
-simulations[0] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 2, "LRU", "WB"]
+simulations[0] = [mem_size, cache_size, 2 ** 6, 2 ** 2, "LRU", "WB"]
 # simulations[3] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 3, "LRU", "WB"]
 # simulations[4] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 4, "LRU", "WB"]
 
