@@ -1,9 +1,10 @@
 import math
 
-MEMORY = 24  # MEMORY - size of main memory in 2^N bytes
-CACHE = 10  # CACHE - size of the cache in 2^N bytes
+MEMORY = 34  # MEMORY - size of main memory in 2^N bytes
+CACHE = 15  # CACHE - size of the cache in 2^N bytes
 BLOCK = 6  # BLOCK - size of a block of memory in 2^N bytes
 MAPPING = 2  # MAPPING - mapping policy for cache in 2^N ways
+COUNTERS_CACHE = 15  # CACHE - size of counters cache in 2^N bytes
 
 mem_size = 2 ** MEMORY
 cache_size = 2 ** CACHE
@@ -11,8 +12,9 @@ block_size = 2 ** BLOCK
 mapping = 2 ** MAPPING
 replace_policy = "LRU"
 write_policy = "WB"
-replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR"]
+replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus"]
 write_policies = ["WB", "WT"]
+ctr_cache_size = 2 ** COUNTERS_CACHE
 
 # Several Simulations parameters
 No_of_simulations = 2
@@ -20,7 +22,7 @@ simulations = {}
 # Memory_size, Cache_size, Block_size, mapping, replace_policy, write_policy
 # simulations[0] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 0, "LRU", "WB"]
 # simulations[1] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 1, "LRU", "WB"]
-simulations[0] = [mem_size, cache_size, 2 ** 6, 2 ** 2, "LRU", "WB"]
+simulations[0] = [mem_size, cache_size, block_size, 2 ** 2, "ship_plus", "WB", ctr_cache_size, "ship_plus"]
 # simulations[3] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 3, "LRU", "WB"]
 # simulations[4] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 4, "LRU", "WB"]
 
@@ -39,12 +41,15 @@ cache_misses_end = [0] * No_of_simulations
 hit_percent = [0] * No_of_simulations
 hits = 0
 misses = 0
+ctr_cache_hits = 0
+ctr_cache_misses = 0
 write_hits = 0
 write_misses = 0
 current_level = 0
 execution_time = 0
 cache_hit = False
-
+smart_set_indexing = True
+WARMUP_INSTRUCTIONS = 0
 ################
 # Parameters
 TREE_ARITY = 32
@@ -69,4 +74,4 @@ vLastStart = TREE_START_ADDRESS
 for x in range(1, len(tree_start_addresses)):
     vLastStart = vLastStart + TREE_SIZE
     tree_start_addresses[x] = vLastStart;
-
+level_access_counter = [0] * TREE_LEVELS

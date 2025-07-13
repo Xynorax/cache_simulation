@@ -11,3 +11,6 @@ class Line:
         self.hit = 0
         self.age_priority = 0
         self.preuse_distance = 0
+        self.rrpv = 3
+        self.r = 0
+        self.signature = 0

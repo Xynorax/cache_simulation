@@ -1,5 +1,7 @@
 from collections import OrderedDict
 
+from Parameters import MEMORY
+
 
 class PageTableEntry:
     def __init__(self, frame_number, valid=True, dirty=False, accessed=False):
@@ -10,7 +12,7 @@ class PageTableEntry:
 
 
 class MemoryManager:
-    def __init__(self, virtual_bits=64, physical_bits=23, page_size=4096):
+    def __init__(self, virtual_bits=64, physical_bits=(MEMORY - 1), page_size=4096):
         self.virtual_bits = virtual_bits
         self.physical_bits = physical_bits
         self.page_size = page_size

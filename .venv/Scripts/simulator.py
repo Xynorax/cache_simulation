@@ -1,170 +1,204 @@
+import random
+
+import numpy as np
 import util
 from Parameters import *
-from benchmarks import *
 from cache import Cache
-from memory import Memory
-from trace_extractor import parse_champsim_trace_line_fast
 from translation import *
 
 
-def read(address, memory, cache):
+def read(address, memory, cache, pc, level=TREE_LEVELS):
     """Read a byte from cache."""
-    cache_block = cache.read(address)
+    cache_block = cache.read(address, pc)
     global execution_time
+    global instructions_number
     if cache_block:
-        global hits
-        hits += 1
+        if cache._type == "data_cache":
+            if instructions_number > WARMUP_INSTRUCTIONS:
+                global hits
+                hits += 1
+        else:
+            if instructions_number > WARMUP_INSTRUCTIONS:
+                global ctr_cache_hits
+                ctr_cache_hits += 1
         global cache_hit
-        cache_hit = True  # Set as true to stop reading parent nodes+
-        execution_time = execution_time + cache._mapping_pol * 0.4  # Add execution time depending on associativity (in cycles)
+        cache_hit = True  # Set as true to stop reading parent nodes
+        # execution_time = execution_time + cache._mapping_pol * 0.4  # Add execution time depending on associativity (in cycles)
     else:
-        block = memory.get_block(address)
-        victim_info = cache.load(address, block)
-        cache_block = cache.read(address)
+        # block = memory.get_block(address)
+        block = bytearray(8)
+        if level > -1:  # flipped because levels are flipped in the array
+            victim_info = cache.load(address, block, pc)
+            # if victim_info:
+            # memory.set_block(victim_info[0], victim_info[1])
+        cache_block = block
+        if instructions_number > WARMUP_INSTRUCTIONS:
+            if cache._type == "data_cache":
+                global misses
+                misses += 1
+            else:
+                global ctr_cache_misses
+                ctr_cache_misses += 1
 
-        global misses
-        misses += 1
-        execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
+        # execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
         # Write victim line's block to memory if replaced
-        if victim_info:
-            memory.set_block(victim_info[0], victim_info[1])
 
-    return cache_block[cache.get_offset(address)]
+    return 1
 
 
-def write(address, byte, memory, cache):
+def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
     """Write a byte to cache."""
-    written = cache.write(address, byte)
+    written = cache.write(address, byte, pc)
     global execution_time
     global write_misses
     global write_hits
+    global instructions_number
     if written:
-
-        write_hits += 1
+        if instructions_number > WARMUP_INSTRUCTIONS:
+            if cache._type == "data_cache":
+                global hits
+                hits += 1
+            else:
+                global ctr_cache_hits
+                ctr_cache_hits += 1
     else:
-        write_misses += 1
-        execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
-    if write_policy == Cache.WRITE_THROUGH:
+        if instructions_number > WARMUP_INSTRUCTIONS:
+            if cache._type == "data_cache":
+                global misses
+                misses += 1
+            else:
+                global ctr_cache_misses
+                ctr_cache_misses += 1
+        # execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
+    if write_policy == Cache.WRITE_THROUGH:  # or level > 0 Flipped because levels are flipped in the array
         # Write block to memory
-        block = memory.get_block(address)
+        #block = memory.get_block(address)
         block[cache.get_offset(address)] = byte
-        memory.set_block(address, block)
+        #memory.set_block(address, block)
     elif write_policy == Cache.WRITE_BACK:
         if not written:
+
             # Write block to cache
-            block = memory.get_block(address)
-            cache.load(address, block)
-            cache.write(address, byte)
+            # block = memory.get_block(address)
+            cache.load(address, block, pc, WB_insertion=1)
+            cache.write(address, byte, pc)
 
 
 command = None
 
 
 # while (command != "quit"):
-def initiate_command(cmd):
+def initiate_command(cmd, ctr=False, pc=0, level_inversed=0):
     operation = cmd
     operation = operation.split()
 
-    try:
-        command = operation[0]
-        params = operation[1:]
-        if command == "read" and len(params) == 1:
-            address = int(params[0])
-            byte = read(address, memory, cache)
+    command = operation[0]
+    params = operation[1:]
+    if command == "read" and len(params) == 1:
+        address = int(params[0])
+        if ctr == False:
+            read(address, memory, cache, pc)
+        else:
+            read(address, memory, ctrs_cache, pc)
 
-            print("Byte 0x" + util.hex_str(byte, 2) + f" read from " +
-                  util.bin_str(address, MEMORY), f"{address}")
+        print(f" read from " +
+              util.bin_str(address, MEMORY), f"{address}")
 
-        elif command == "write" and len(params) == 2:
-            address = int(params[0])
-            byte = int(params[1])
+    elif command == "write" and len(params) == 2:
+        address = int(params[0])
+        byte = int(params[1])
+        if ctr == False:
+            write(address, byte, memory, cache, pc, level_inversed)
+        else:
+            write(address, byte, memory, ctrs_cache, pc, level_inversed)
+
+        print(" written to " +
+              util.bin_str(address, MEMORY), f"{address}")
+
+    elif command == "randread" and len(params) == 1:
+        amount = int(params[0])
+
+        for i in range(amount):
+            address = random.randint(0, mem_size - 1)
+            read(address, memory, cache)
+
+        print("\n" + str(amount) + " bytes read from memory\n", flush=True)
+
+    elif command == "randwrite" and len(params) == 1:
+        amount = int(params[0])
+
+        for i in range(amount):
+            address = random.randint(0, mem_size - 1)
+            byte = util.rand_byte()
             write(address, byte, memory, cache)
 
-            print("Byte 0x" + util.hex_str(byte, 2) + " written to " +
-                  util.bin_str(address, MEMORY), f"{address}")
+        print("\n" + str(amount) + " bytes written to memory\n", flush=True)
 
-        elif command == "randread" and len(params) == 1:
-            amount = int(params[0])
+    elif command == "printcache" and len(params) == 2:
+        start = int(params[0])
+        amount = int(params[1])
 
-            for i in range(amount):
-                address = random.randint(0, mem_size - 1)
-                read(address, memory, cache)
+        cache.print_section(start, amount)
 
-            print("\n" + str(amount) + " bytes read from memory\n", flush=True)
+    elif command == "printmem" and len(params) == 2:
+        start = int(params[0])
+        amount = int(params[1])
 
-        elif command == "randwrite" and len(params) == 1:
-            amount = int(params[0])
+        memory.print_section(start, amount)
 
-            for i in range(amount):
-                address = random.randint(0, mem_size - 1)
-                byte = util.rand_byte()
-                write(address, byte, memory, cache)
+    elif command == "stats" and len(params) == 0:
+        ratio = (hits / ((hits + misses) if misses else 1)) * 100
 
-            print("\n" + str(amount) + " bytes written to memory\n", flush=True)
+        print("Hits: {0} | Misses: {1}".format(hits, misses), flush=True)
+        print("Hit/Miss Ratio: {0:.2f}%".format(ratio), flush=True)
 
-        elif command == "printcache" and len(params) == 2:
-            start = int(params[0])
-            amount = int(params[1])
+    elif command != "quit":
+        print("\nERROR: invalid command\n", flush=True)
 
-            cache.print_section(start, amount)
-
-        elif command == "printmem" and len(params) == 2:
-            start = int(params[0])
-            amount = int(params[1])
-
-            memory.print_section(start, amount)
-
-        elif command == "stats" and len(params) == 0:
-            ratio = (hits / ((hits + misses) if misses else 1)) * 100
-
-            print("Hits: {0} | Misses: {1}".format(hits, misses), flush=True)
-            print("Hit/Miss Ratio: {0:.2f}%".format(ratio), flush=True)
-
-        elif command != "quit":
-            print("\nERROR: invalid command\n", flush=True)
-
-    except IndexError:
-        print("\nERROR: out of bounds\n", flush=True)
-    except:
-        print("\nERROR: incorrect syntax\n", flush=True)
+    # except IndexError:
+    #    print("\nERROR: out of bounds\n", flush=True)
+    # except:
+    #    print("\nERROR: incorrect syntax\n", flush=True)
 
 
 class MemoryAccess:
-    def __init__(self, access_type, address, byte=00):
+    def __init__(self, access_type, address, byte=00, pc=0):
         self.access_type = access_type
         self.counter_addresses = [0] * (TREE_LEVELS)
         self.byte = byte
+        self._pc = pc
         if access_type == "read":
-            initiate_command(f"read {address}")
+            initiate_command(f"read {address}", False, self._pc)
         elif access_type == "write":
-            initiate_command(f"read {address}")
-            initiate_command(f"write {address} {self.byte}")
+            initiate_command(f"read {address}", False, self._pc)
+            initiate_command(f"write {address} {self.byte}", False, self._pc)
         global cache_hit
         cache_hit = False
+        root_index = int((address - MEMORY_START_ADDR) // IND_TREE_SIZE)
+        tree_offset = int(root_index * IND_TREE_SIZE)
+        dataNodeNum = int((address - MEMORY_START_ADDR - tree_offset) // block_size)
         for level in range(TREE_LEVELS):
-            self.compute_counter_addresses(address, level)
+            self.compute_counter_addresses(address, level, root_index, tree_offset, dataNodeNum)
         self.access_counter()
 
     def access_counter(self):
         if self.access_type == "read":
             for i in reversed(range(len(self.counter_addresses))):
-                initiate_command(f"read {self.counter_addresses[i]}")
+                initiate_command(f"read {self.counter_addresses[i]}", False, self._pc, i)
+                global level_access_counter
+                level_access_counter[i] += 1
                 global cache_hit
                 if (cache_hit):
                     cache_hit = False
                     break
         elif self.access_type == "write":
             for i in reversed(range(len(self.counter_addresses))):
-                initiate_command(f"read {self.counter_addresses[i]}")
-                initiate_command(f"write {self.counter_addresses[i]} {self.byte}")
+                initiate_command(f"read {self.counter_addresses[i]}", False, self._pc, i)
+                level_access_counter[i] += 1
+                initiate_command(f"write {self.counter_addresses[i]} {self.byte}", False, self._pc, i)
 
-    def compute_counter_addresses(self, cpu_address, current_level):
-        # 1. Compute root index (which tree protects this address)
-        root_index = int((cpu_address - MEMORY_START_ADDR) // IND_TREE_SIZE)
+    def compute_counter_addresses(self, cpu_address, current_level, root_index, tree_offset, dataNodeNum):
 
-        # 2 . Compute leaf node index (data block number within the tree)
-        tree_offset = int(root_index * IND_TREE_SIZE)
-        dataNodeNum = int((cpu_address - MEMORY_START_ADDR - tree_offset) // block_size)
         global tree_level_address
 
         if current_level == 0:
@@ -184,8 +218,8 @@ class MemoryAccess:
 
 
 def benchmark_random_reads():  ##Benchmark 1 - random read access
-    size = 100  # number of random numbers you want
-    random_array = [random.randint(size, mem_size / 2) for _ in range(size)]
+    size = 10000  # number of random numbers you want
+    random_array = [random.randint(size, (mem_size / 2) - 1) for _ in range(size)]
     for i in range(len(random_array)):
         MemoryAccess("read", random_array[i])
     initiate_command("stats")
@@ -194,17 +228,19 @@ def benchmark_random_reads():  ##Benchmark 1 - random read access
 
 def benchmark_manual():  ##Benchmark 2 - Manually inputed values
     size = 2  # array length
-    array = [123]  # list(range(0, 10, 1))
-    MemoryAccess("read", 1)
-    MemoryAccess("read", (mem_size // 4) - 2)
+    array = [123]
+    # for i in range(len(array)):
+    MemoryAccess("read", 0)
+    MemoryAccess("read", 7)
+    MemoryAccess("read", 63)
     initiate_command("stats")
-    # initiate_command("printpymem 0 20")
+    # initiate_command("printmem 0 20")
     # initiate_command("printcache 0 20")
 
 
 def benchmark_fir():  # Benchmark 3 FIR filter
     N = 40  # Order of the filter
-    input_length = 500
+    input_length = 50000
     input_array = [random.randint(0, 100) for _ in range(input_length)]
     coeffs = [random.randint(0, 100) for _ in range(N)]  # N-tap filter
     N = len(coeffs)
@@ -236,12 +272,10 @@ def benchmark_seq_read():  # Benchmark 5 Sequential read
         MemoryAccess("read", j)
     initiate_command("stats")
     print(f"Execution time: {execution_time}")
-
-
 def benchmark_binary_search():  # Benchmark 6 binary search
     searches = 10000
     for z in range(searches):
-        upper_bound = int(memory._size / 2) - 1
+        upper_bound = int(memory_size / 2) - 1
         random_address = random.randint(0, upper_bound)
         low = 0
         high = upper_bound  # The maximum possible address in our search space
@@ -261,37 +295,51 @@ def benchmark_binary_search():  # Benchmark 6 binary search
             print(f"FAIL: Target {random_address} not found after {attempts} attempts. Search space exhausted.")
 
 
-def benchmark_trace():
+def benchmark_trace(MAX_INSTRUCTIONS):
     mm = MemoryManager()
+    global instructions_number
     instructions_number = 0
     TRACE_FILE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.champsimtrace"
-    MAX_INSTRUCTIONS = 5000000
-    BATCH = 5000000
-    for i in range(0, MAX_INSTRUCTIONS, BATCH):
-        print(i)
-        instr_batch = parse_champsim_trace_line_fast(TRACE_FILE_PATH, i, BATCH)
-        for instr in instr_batch:
-            instructions_number += 1
-            print(f"Instruction number:{instructions_number}")
+    NUMPY_TRACE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.npy"
+    NUMPY_TRACE_PATH = "D:\\Youssef\\TUM\\ChampSim\\429.mcf-51B.npy"
+    BATCH = 1
+    instr_batch = np.load(NUMPY_TRACE_PATH)
+    random_64byte = 0xEE
+    random_byte = 0xA
+    # for i in range(0, MAX_INSTRUCTIONS, BATCH):
+    # instr_batch = parse_champsim_trace_line_fast(TRACE_FILE_PATH, i, BATCH)
+    for x in range(MAX_INSTRUCTIONS):
+        instr = instr_batch[x]
+        instructions_number += 1
+        print(f"Instruction number:{instructions_number}")
+        program_counter = instr[0]
+        if instr[9] == 0 and instr[10] == 0 and instr[11] == 0 and instr[12] == 0 and instr[13] == 0 and instr[14] == 0:
+            None
+        else:
             for k in range(2):
                 dest_addr = instr[9 + k]
                 if dest_addr != 0:  # Skip if no destination memory
                     dest_addr = mm.translate_virtual_to_physical(dest_addr)
-                    MemoryAccess("write", dest_addr)
+                    print(f"Virtual Address:{dest_addr}")
+                    MemoryAccess("write", dest_addr, random_byte, program_counter)
             for k in range(4):
                 src_addr = instr[11 + k]
                 if src_addr != 0:  # Skip if 0
+                    print(f"Virtual Address:{src_addr}")
                     src_addr = mm.translate_virtual_to_physical(src_addr)
-                    MemoryAccess("read", src_addr)
+                    MemoryAccess("read", src_addr, pc=program_counter)
 
 for k in range(len(simulations)):
+
     execution_time = 0  # Reset execution time for each simulation
     global hits
     hits = 0
     global misses
     misses = 0
-    memory = Memory(mem_size, block_size)
-    cache = Cache(simulations[k][1], simulations[k][0], simulations[k][2],
+    # memory = Memory(mem_size, block_size)
+    memory = 0
+    print(f"Warum up instructions: {WARMUP_INSTRUCTIONS}")
+    cache = Cache(simulations[k][1], simulations[k][0] // 2, simulations[k][2],
                   simulations[k][3], simulations[k][4], simulations[k][5])
 
     mapping_str = "{0}-way associative".format(simulations[k][3])
@@ -302,8 +350,11 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    # benchmark_trace()
-    benchmark_manual()
+    benchmark_trace(20)
+    # benchmark_random_reads()
+    # benchmark_manual()
+    # benchmark_random_reads()
+    #benchmark_manual()
     Execution_Times[k] = execution_time
     cache_hits_end[k] = hits
     cache_misses_end[k] = misses

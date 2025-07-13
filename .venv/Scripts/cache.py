@@ -2,6 +2,7 @@ import random
 from math import log
 
 import util
+from Parameters import smart_set_indexing
 from line import Line
 
 
@@ -14,12 +15,13 @@ class Cache:
     FIFO = "FIFO"
     RAND = "RAND"
     RLR = "RLR"
+    ship_plus = "ship_plus"
     # Mapping policies
     WRITE_BACK = "WB"
     WRITE_THROUGH = "WT"
 
     def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol,
-                 write_pol):
+                 write_pol, type="data_cache"):
         self._lines = [Line(block_size) for i in range(size // block_size)]
 
         self._mapping_pol = mapping_pol  # Mapping policy
@@ -29,13 +31,90 @@ class Cache:
         self._size = size  # Cache size
         self._mem_size = mem_size  # Memory size
         self._block_size = block_size  # Block size
-
+        self._type = type
         # Bit offset of cache line tag
         self._tag_shift = int(log(self._size // self._mapping_pol, 2))
         # Bit offset of cache line set
         self._set_shift = int(log(self._block_size, 2))
+        if self._replace_pol == Cache.ship_plus:
+            self._shct = self.SHCT()
+            # Track ~64 sampled sets (1-2% of total sets)
+            total_sets = size // (block_size * mapping_pol)
+            self.sampled_sets = set(random.sample(range(total_sets), 16))
 
-    def read(self, address):
+    class SHCT:
+        """
+        Signature History Counter Table implementation
+        Based on the SHiP++ cache replacement policy
+        """
+
+        def __init__(self, num_entries=65536, counter_bits=3):
+            """
+            Initialize SHCT
+
+            Args:
+                num_entries: Number of entries in the table (default: 16K)
+                counter_bits: Number of bits per counter (default: 3-bit)
+            """
+            self.num_entries = num_entries
+            self.counter_bits = counter_bits
+            self.max_counter = (1 << counter_bits) - 1  # 2^3 - 1 = 7
+            self.min_counter = 0
+
+            # Initialize all counters to 0
+            self.counters = [0] * num_entries
+
+            # Statistics
+            self.hits = 0
+            self.evictions = 0
+            self.updates = 0
+
+        def get_signature(self, pc, is_prefetch=False):
+            """
+            Calculate signature from PC
+
+            Args:
+                pc: Program Counter
+                is_prefetch: Whether this is a prefetch access
+
+            Returns:
+                14-bit signature
+            """
+            if is_prefetch:
+                # SHiP++ enhancement: separate signatures for prefetch
+                signature = ((pc << 1) + 1) & 0xFFFF  # 14-bit mask
+            else:
+                signature = (pc << 1) & 0xFFFF  # 14-bit mask
+
+            return signature
+
+        def increment_counter(self, signature):
+            """
+            Increment counter for a signature (on cache hit)
+
+            Args:
+                signature: 14-bit signature
+            """
+            index = signature % self.num_entries
+            if self.counters[index] < self.max_counter:
+                self.counters[index] += 1
+
+        def decrement_counter(self, signature):
+            """
+            Decrement counter for a signature (on eviction without reuse)
+
+            Args:
+                signature: 14-bit signature
+            """
+            index = signature % self.num_entries
+            if self.counters[index] > self.min_counter:
+                self.counters[index] -= 1
+
+        def get_counter(self, signature):
+            index = signature % self.num_entries
+            return self.counters[index]
+
+    def read(self, address, pc):
         """Read a block of memory from the cache.
 
         :param int address: memory address for data to read from cache
@@ -58,9 +137,18 @@ class Cache:
                 self._update_use(line, set)
             if (self._replace_pol == Cache.RLR):
                 self._update_rlr(line, set)
+
+            if (self._replace_pol == Cache.ship_plus):
+                set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
+                if set_idx in self.sampled_sets:
+                    if line.r == 0:
+                        self._shct.increment_counter(line.signature)
+                        line.r = 1
+                line.rrpv = 0
+
         return line.data if line else line
 
-    def load(self, address, data):
+    def load(self, address, data, pc, WB_insertion=0):
         """Load a block of memory into the cache.
 
         :param int address: memory address for data to load to cache
@@ -88,6 +176,42 @@ class Cache:
         elif self._replace_pol == Cache.RAND:
             index = random.randint(0, self._mapping_pol - 1)
             victim = set[index]
+
+        elif self._replace_pol == Cache.ship_plus:
+            victim = None
+            for index in range(len(set)):  # Check if a line in the set is free
+                if set[index].valid == 0:
+                    victim = set[index]
+                    break
+            if victim == None:
+                while victim == None:
+                    for index in range(len(set)):  # Check which line has RRPV = 3
+                        if set[index].rrpv == 3:
+                            victim = set[index]
+                            break
+                    if victim != None:
+                        break
+                    for item in set:
+                        item.rrpv += 1
+            incoming_signature = self._shct.get_signature(pc)
+            if WB_insertion == 1:
+                victim.rrpv = 3
+            elif self._shct.get_counter(incoming_signature) == 0:
+                victim.rrpv = 3
+            elif self._shct.get_counter(incoming_signature) == self._shct.max_counter:
+                victim.rrpv = 0
+            else:
+                victim.rrpv = 2
+            set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
+            if victim.r == 0 and victim.valid and set_idx in self.sampled_sets:
+                self._shct.decrement_counter(victim.signature)
+            if set_idx in self.sampled_sets:
+                victim.r = 0
+                victim.signature = incoming_signature
+
+
+
+
         elif self._replace_pol == Cache.RLR:
             victim = set[0]
             for index in range(len(set)):
@@ -111,9 +235,10 @@ class Cache:
         victim.valid = 1
         victim.tag = tag
         victim.data = data
+
         return victim_info
 
-    def write(self, address, byte):
+    def write(self, address, byte, pc):
         """Write a byte to cache.
 
         :param int address: memory address for data to write to cache
@@ -132,7 +257,7 @@ class Cache:
 
         # Update data of cache line
         if line:
-            line.data[self.get_offset(address)] = byte
+            # line.data[self.get_offset(address)] = byte
             line.modified = 1
 
             if (self._replace_pol == Cache.LRU or
@@ -187,20 +312,43 @@ class Cache:
         """
         return address & (self._block_size - 1)
 
+
     def _get_tag(self, address):
         """Get the cache line tag from a physical address.
 
         :param int address: memory address to get tag from
         """
-        return address >> self._tag_shift
+        if self._type == "data_cache" or smart_set_indexing == False:
+            return address >> self._tag_shift
+        else:
+            # group1 = (address >> 29) & 0b1111
+            # group2 = (address >> 24) & 0b1111
+            # group3 = (address >> 19) & 0b1111
+            # group4 = (address >> 14) & 0b1111
+            # group5 = (address >> 9) & 0b1111
+            group1 = (address >> 16) & 0b111111111111111111
+            group2 = (address >> 12) & 0b111
+            tag = ((group1 << 3) | group2)
+            return tag
 
     def _get_set(self, address):
         """Get a set of cache lines from a physical address.
 
         :param int address: memory address to get set from
         """
-        set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
-        set_num = (address >> self._set_shift) & set_mask
+        if self._type == "data_cache" or smart_set_indexing == False:
+            set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+            set_num = (address >> self._set_shift) & set_mask
+
+        else:
+            # bit_28 = (address >> 28) & 0b1
+            # bit_23 = (address >> 23) & 0b1
+            # bit_18 = (address >> 18) & 0b1
+            bit_14 = (address >> 15) & 0b1
+            last_bits = ((bit_14 << 6) | (address >> 6) & 0b111111)
+            set_num = last_bits
+            if set_num == 128:
+                raise ValueError("Set number = -1")
         index = set_num * self._mapping_pol
         return self._lines[index:index + self._mapping_pol]
 
