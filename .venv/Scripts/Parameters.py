@@ -17,7 +17,7 @@ write_policies = ["WB", "WT"]
 ctr_cache_size = 2 ** COUNTERS_CACHE
 
 # Several Simulations parameters
-No_of_simulations = 2
+No_of_simulations = 1
 simulations = {}
 # Memory_size, Cache_size, Block_size, mapping, replace_policy, write_policy
 # simulations[0] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 0, "LRU", "WB"]
@@ -43,12 +43,14 @@ hits = 0
 misses = 0
 ctr_cache_hits = 0
 ctr_cache_misses = 0
+l1_hits = 0
+l1_misses = 0
 write_hits = 0
 write_misses = 0
 current_level = 0
 execution_time = 0
 cache_hit = False
-smart_set_indexing = True
+smart_set_indexing = False
 WARMUP_INSTRUCTIONS = 0
 ################
 # Parameters
@@ -74,4 +76,6 @@ vLastStart = TREE_START_ADDRESS
 for x in range(1, len(tree_start_addresses)):
     vLastStart = vLastStart + TREE_SIZE
     tree_start_addresses[x] = vLastStart;
+level_hits = [0] * TREE_LEVELS
+level_misses = [0] * TREE_LEVELS
 level_access_counter = [0] * TREE_LEVELS

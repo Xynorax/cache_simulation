@@ -10,6 +10,7 @@ from translation import *
 def read(address, memory, cache, pc, level=TREE_LEVELS):
     """Read a byte from cache."""
     cache_block = cache.read(address, pc)
+
     global execution_time
     global instructions_number
     if cache_block:
@@ -17,29 +18,44 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global hits
                 hits += 1
-        else:
+        elif cache._type == "level1":
+            if instructions_number > WARMUP_INSTRUCTIONS:
+                global l1_hits
+                l1_hits += 1
+        elif cache._type == "ctr_cache":
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_hits
                 ctr_cache_hits += 1
+        if instructions_number > WARMUP_INSTRUCTIONS and cache._type != "level1":
+            if level < TREE_LEVELS:
+                level_hits[level] += 1
         global cache_hit
         cache_hit = True  # Set as true to stop reading parent nodes
         # execution_time = execution_time + cache._mapping_pol * 0.4  # Add execution time depending on associativity (in cycles)
     else:
-        # block = memory.get_block(address)
         block = bytearray(8)
+        if cache._type == "level1":
+            cache.load(address, block, pc)
+            if instructions_number > WARMUP_INSTRUCTIONS:
+                global l1_misses
+                l1_misses += 1
+                return 0
+        # block = memory.get_block(address)
+
         if level > -1:  # flipped because levels are flipped in the array
             victim_info = cache.load(address, block, pc)
             # if victim_info:
             # memory.set_block(victim_info[0], victim_info[1])
-        cache_block = block
         if instructions_number > WARMUP_INSTRUCTIONS:
             if cache._type == "data_cache":
                 global misses
                 misses += 1
-            else:
+
+            elif cache._type == "ctr_cache":
                 global ctr_cache_misses
                 ctr_cache_misses += 1
-
+            if level < TREE_LEVELS:
+                level_misses[level] += 1
         # execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
         # Write victim line's block to memory if replaced
 
@@ -54,21 +70,37 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
     global write_hits
     global instructions_number
     if written:
-        if instructions_number > WARMUP_INSTRUCTIONS:
-            if cache._type == "data_cache":
+        if cache._type == "data_cache":
+            if instructions_number > WARMUP_INSTRUCTIONS:
                 global hits
                 hits += 1
-            else:
+        elif cache._type == "level1":
+            if instructions_number > WARMUP_INSTRUCTIONS:
+                global l1_hits
+                l1_hits += 1
+        elif cache._type == "ctr_cache":
+            if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_hits
                 ctr_cache_hits += 1
+        if instructions_number > WARMUP_INSTRUCTIONS and cache._type != "level1":
+            if level < TREE_LEVELS:
+                level_hits[level] += 1
     else:
         if instructions_number > WARMUP_INSTRUCTIONS:
             if cache._type == "data_cache":
                 global misses
                 misses += 1
-            else:
+            elif cache._type == "level1":
+                if instructions_number > WARMUP_INSTRUCTIONS:
+                    cache.load(address, block, pc, WB_insertion=1)
+                    global l1_misses
+                    l1_misses += 1
+                    return 0
+            elif cache._type == "ctr_cache":
                 global ctr_cache_misses
                 ctr_cache_misses += 1
+            if level < TREE_LEVELS:
+                level_misses[level] += 1
         # execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
     if write_policy == Cache.WRITE_THROUGH:  # or level > 0 Flipped because levels are flipped in the array
         # Write block to memory
@@ -97,9 +129,10 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=0):
     if command == "read" and len(params) == 1:
         address = int(params[0])
         if ctr == False:
-            read(address, memory, cache, pc)
+            if read(address, memory, l1cache, pc, level_inversed) == 0:
+                read(address, memory, cache, pc, level_inversed)
         else:
-            read(address, memory, ctrs_cache, pc)
+            read(address, memory, ctrs_cache, pc, level_inversed)
 
         print(f" read from " +
               util.bin_str(address, MEMORY), f"{address}")
@@ -108,7 +141,8 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=0):
         address = int(params[0])
         byte = int(params[1])
         if ctr == False:
-            write(address, byte, memory, cache, pc, level_inversed)
+            if write(address, byte, memory, l1cache, pc, level_inversed) == 0:
+                write(address, byte, memory, cache, pc, level_inversed)
         else:
             write(address, byte, memory, ctrs_cache, pc, level_inversed)
 
@@ -339,9 +373,11 @@ for k in range(len(simulations)):
     # memory = Memory(mem_size, block_size)
     memory = 0
     print(f"Warum up instructions: {WARMUP_INSTRUCTIONS}")
-    cache = Cache(simulations[k][1], simulations[k][0] // 2, simulations[k][2],
+    cache = Cache(simulations[k][1], simulations[k][0], simulations[k][2],
                   simulations[k][3], simulations[k][4], simulations[k][5])
-
+    # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
+    l1cache = Cache(simulations[k][1], simulations[k][0], simulations[k][2], 2 ** 4, "LRU", write_pol="WB",
+                    type="level1")
     mapping_str = "{0}-way associative".format(simulations[k][3])
     print("\nMemory size: " + str(mem_size) +
           " bytes (" + str(mem_size // block_size) + " blocks)")
@@ -371,3 +407,11 @@ print("Cache misses:")
 print(cache_misses_end)
 print("Hit percent:")
 print(hit_percent)
+print("L1 Cache Hits")
+print(l1_hits)
+print("L1 Cache Misses")
+print(l1_misses)
+print("Level hits in LLC:")
+print(level_hits)
+print("Level misses in LLC:")
+print(level_misses)
