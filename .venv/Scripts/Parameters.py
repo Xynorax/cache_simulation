@@ -76,6 +76,9 @@ vLastStart = TREE_START_ADDRESS
 for x in range(1, len(tree_start_addresses)):
     vLastStart = vLastStart + TREE_SIZE
     tree_start_addresses[x] = vLastStart;
+
+level_hits_l1 = [0] * TREE_LEVELS
+level_misses_l1 = [0] * TREE_LEVELS
 level_hits = [0] * TREE_LEVELS
 level_misses = [0] * TREE_LEVELS
 level_access_counter = [0] * TREE_LEVELS

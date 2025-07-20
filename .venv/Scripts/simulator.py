@@ -26,8 +26,10 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_hits
                 ctr_cache_hits += 1
-        if instructions_number > WARMUP_INSTRUCTIONS and cache._type != "level1":
-            if level < TREE_LEVELS:
+        if instructions_number > WARMUP_INSTRUCTIONS and level < TREE_LEVELS:
+            if cache._type == "level1":
+                level_hits_l1[level] += 1
+            else:
                 level_hits[level] += 1
         global cache_hit
         cache_hit = True  # Set as true to stop reading parent nodes
@@ -37,6 +39,8 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
         if cache._type == "level1":
             cache.load(address, block, pc)
             if instructions_number > WARMUP_INSTRUCTIONS:
+                if level < TREE_LEVELS:
+                    level_misses_l1[level] += 1
                 global l1_misses
                 l1_misses += 1
                 return 0
@@ -55,6 +59,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 global ctr_cache_misses
                 ctr_cache_misses += 1
             if level < TREE_LEVELS:
+
                 level_misses[level] += 1
         # execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
         # Write victim line's block to memory if replaced
@@ -82,8 +87,10 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_hits
                 ctr_cache_hits += 1
-        if instructions_number > WARMUP_INSTRUCTIONS and cache._type != "level1":
-            if level < TREE_LEVELS:
+        if instructions_number > WARMUP_INSTRUCTIONS and level < TREE_LEVELS:
+            if cache._type == "level1":
+                level_hits_l1[level] += 1
+            else:
                 level_hits[level] += 1
     else:
         if instructions_number > WARMUP_INSTRUCTIONS:
@@ -95,6 +102,8 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
                     cache.load(address, block, pc, WB_insertion=1)
                     global l1_misses
                     l1_misses += 1
+                    if level < TREE_LEVELS:
+                        level_misses_l1[level] += 1
                     return 0
             elif cache._type == "ctr_cache":
                 global ctr_cache_misses
@@ -120,7 +129,7 @@ command = None
 
 
 # while (command != "quit"):
-def initiate_command(cmd, ctr=False, pc=0, level_inversed=0):
+def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
     operation = cmd
     operation = operation.split()
 
@@ -376,7 +385,7 @@ for k in range(len(simulations)):
     cache = Cache(simulations[k][1], simulations[k][0], simulations[k][2],
                   simulations[k][3], simulations[k][4], simulations[k][5])
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
-    l1cache = Cache(simulations[k][1], simulations[k][0], simulations[k][2], 2 ** 4, "LRU", write_pol="WB",
+    l1cache = Cache(2 ** 15, simulations[k][0], simulations[k][2], 2 ** 4, "LRU", write_pol="WB",
                     type="level1")
     mapping_str = "{0}-way associative".format(simulations[k][3])
     print("\nMemory size: " + str(mem_size) +
@@ -386,7 +395,7 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_trace(20)
+    benchmark_trace(200)
     # benchmark_random_reads()
     # benchmark_manual()
     # benchmark_random_reads()
@@ -401,9 +410,9 @@ print("Execution times:")
 min_value = min(Execution_Times)
 Execution_Times = [time / min_value for time in Execution_Times] if (min_value) != 0 else 0.0
 print(Execution_Times)
-print("Cache hits:")
+print("LLC Cache hits:")
 print(cache_hits_end)
-print("Cache misses:")
+print("LLC Cache misses:")
 print(cache_misses_end)
 print("Hit percent:")
 print(hit_percent)
@@ -411,7 +420,11 @@ print("L1 Cache Hits")
 print(l1_hits)
 print("L1 Cache Misses")
 print(l1_misses)
-print("Level hits in LLC:")
+print("Counter Level hits in L1 Cache:")
+print(level_hits_l1)
+print("Counter Level misses in L1 Cache:")
+print(level_misses_l1)
+print("Counter Level hits in LLC:")
 print(level_hits)
-print("Level misses in LLC:")
+print("Counter Level misses in LLC:")
 print(level_misses)

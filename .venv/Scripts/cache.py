@@ -165,9 +165,14 @@ class Cache:
                 self._replace_pol == Cache.FIFO):
             victim = set[0]
 
-            for index in range(len(set)):
-                if set[index].use < victim.use:
+            for index in range(len(set)):  # Check if a line in the set is free
+                if set[index].valid == 0:
                     victim = set[index]
+                    break
+            if victim is None:
+                for index in range(len(set)):
+                    if set[index].use < victim.use:
+                        victim = set[index]
 
             victim.use = 0
 
@@ -357,15 +362,12 @@ class Cache:
 
         :param line line: cache line to update use bits of
         """
-        if (self._replace_pol == Cache.LRU or
-                self._replace_pol == Cache.FIFO):
-            use = line.use
-
-            if line.use < self._mapping_pol:
-                line.use = self._mapping_pol
-                for other in set:
-                    if other is not line and other.use > use:
-                        other.use -= 1
+        if self._replace_pol == Cache.LRU:
+            # Set the current line as MRU (highest use value)
+            line.use = max(line.use for line in set) + 1
+        elif self._replace_pol == Cache.FIFO:
+            # No update on hits (FIFO only cares about insertion order)
+            pass
         elif self._replace_pol == Cache.LFU:
             line.use += 1
 
