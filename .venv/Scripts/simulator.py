@@ -43,7 +43,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                     level_misses_l1[level] += 1
                 global l1_misses
                 l1_misses += 1
-                return 0
+            return 0
         # block = memory.get_block(address)
 
         if level > -1:  # flipped because levels are flipped in the array
@@ -93,24 +93,26 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             else:
                 level_hits[level] += 1
     else:
-        if instructions_number > WARMUP_INSTRUCTIONS:
-            if cache._type == "data_cache":
+        if cache._type == "data_cache":
+            if instructions_number > WARMUP_INSTRUCTIONS:
                 global misses
                 misses += 1
-            elif cache._type == "level1":
-                if instructions_number > WARMUP_INSTRUCTIONS:
-                    cache.load(address, block, pc, WB_insertion=1)
-                    global l1_misses
-                    l1_misses += 1
-                    if level < TREE_LEVELS:
-                        level_misses_l1[level] += 1
-                    return 0
-            elif cache._type == "ctr_cache":
-                global ctr_cache_misses
-                ctr_cache_misses += 1
-            if level < TREE_LEVELS:
-                level_misses[level] += 1
-        # execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
+                if level < TREE_LEVELS:
+                    level_misses[level] += 1
+                # execution_time = execution_
+        elif cache._type == "level1":
+            cache.load(address, block, pc, WB_insertion=1)
+            cache.write(address, byte, pc)
+            if instructions_number > WARMUP_INSTRUCTIONS:
+                global l1_misses
+                l1_misses += 1
+                if level < TREE_LEVELS:
+                    level_misses_l1[level] += 1
+            return 0
+        elif cache._type == "ctr_cache":
+            global ctr_cache_misses
+            ctr_cache_misses += 1
+
     if write_policy == Cache.WRITE_THROUGH:  # or level > 0 Flipped because levels are flipped in the array
         # Write block to memory
         #block = memory.get_block(address)
@@ -139,7 +141,7 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
         address = int(params[0])
         if ctr == False:
             if read(address, memory, l1cache, pc, level_inversed) == 0:
-                read(address, memory, cache, pc, level_inversed)
+                read(address, memory, LLC, pc, level_inversed)
         else:
             read(address, memory, ctrs_cache, pc, level_inversed)
 
@@ -151,7 +153,7 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
         byte = int(params[1])
         if ctr == False:
             if write(address, byte, memory, l1cache, pc, level_inversed) == 0:
-                write(address, byte, memory, cache, pc, level_inversed)
+                write(address, byte, memory, LLC, pc, level_inversed)
         else:
             write(address, byte, memory, ctrs_cache, pc, level_inversed)
 
@@ -237,7 +239,7 @@ class MemoryAccess:
         elif self.access_type == "write":
             for i in reversed(range(len(self.counter_addresses))):
                 initiate_command(f"read {self.counter_addresses[i]}", False, self._pc, i)
-                level_access_counter[i] += 1
+                level_access_counter[i] += 2
                 initiate_command(f"write {self.counter_addresses[i]} {self.byte}", False, self._pc, i)
 
     def compute_counter_addresses(self, cpu_address, current_level, root_index, tree_offset, dataNodeNum):
@@ -382,8 +384,8 @@ for k in range(len(simulations)):
     # memory = Memory(mem_size, block_size)
     memory = 0
     print(f"Warum up instructions: {WARMUP_INSTRUCTIONS}")
-    cache = Cache(simulations[k][1], simulations[k][0], simulations[k][2],
-                  simulations[k][3], simulations[k][4], simulations[k][5])
+    LLC = Cache(simulations[k][1], simulations[k][0], simulations[k][2],
+                simulations[k][3], simulations[k][4], simulations[k][5], type="data_cache")
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
     l1cache = Cache(2 ** 15, simulations[k][0], simulations[k][2], 2 ** 4, "LRU", write_pol="WB",
                     type="level1")
@@ -395,7 +397,7 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_trace(200)
+    benchmark_trace(2000)
     # benchmark_random_reads()
     # benchmark_manual()
     # benchmark_random_reads()
