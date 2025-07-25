@@ -41,6 +41,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
     else:
         block = bytearray(8)
         if cache._type == "level1":
+            cache.load(address, block, pc)
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
                 l1_misses += 1
@@ -61,13 +62,14 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
             if cache._type == "data_cache":
                 global misses
                 misses += 1
-
+                if level < TREE_LEVELS:
+                    level_misses[level] += 1
             elif cache._type == "ctr_cache":
                 global ctr_cache_misses
                 ctr_cache_misses += 1
-            if level < TREE_LEVELS:
 
-                level_misses[level] += 1
+
+
         # execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
         # Write victim line's block to memory if replaced
 
@@ -101,13 +103,15 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
         if instructions_number > WARMUP_INSTRUCTIONS and level < TREE_LEVELS:
             if cache._type == "level1_cc":
                 level_hits_l1[level] += 1
-            else:
+            elif cache._type == "data_cache":
                 level_hits[level] += 1
     else:
         if cache._type == "data_cache":
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global misses
                 misses += 1
+                if level < TREE_LEVELS:
+                    level_misses[level] += 1
         elif cache._type == "level1_cc":
             cache.load(address, block, pc, WB_insertion=1)
             cache.write(address, byte, pc)
@@ -129,8 +133,7 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_misses
                 ctr_cache_misses += 1
-                if level < TREE_LEVELS:
-                    level_misses[level] += 1
+
         # execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
     if write_policy == Cache.WRITE_THROUGH:  # or level > 0 Flipped because levels are flipped in the array
         # Write block to memory
@@ -396,7 +399,7 @@ def benchmark_trace(MAX_INSTRUCTIONS):
                     MemoryAccess("read", src_addr, pc=program_counter)
 
 for k in range(len(simulations)):
-
+    l1_cache_size = 2 ** 15
     execution_time = 0  # Reset execution time for each simulation
     global hits
     hits = 0
@@ -404,13 +407,14 @@ for k in range(len(simulations)):
     misses = 0
     # memory = Memory(mem_size, block_size)
     memory = 0
-    print(f"Warum up instructions: {WARMUP_INSTRUCTIONS}")
+
     LLC = Cache(simulations[k][1], simulations[k][0], simulations[k][2],
                 simulations[k][3], simulations[k][4], simulations[k][5], type="data_cache")
-    # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
-    l1cache = Cache(2 ** 14, simulations[k][0], simulations[k][2], 2 ** 4, "LRU", write_pol="WB",
+    # def __init__(self, size, mem_size, lock_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
+
+    l1cache = Cache(l1_cache_size//2, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
-    l1_cache_cc = Cache(2 ** 14, simulations[k][0], simulations[k][2], 2 ** 4, "LRU", write_pol="WB",
+    l1_cache_cc = Cache(l1_cache_size//2, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                         type="level1_CC")
 
     mapping_str = "{0}-way associative".format(simulations[k][3])
@@ -421,7 +425,7 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_trace(200)
+    benchmark_trace(5000000)
     # benchmark_random_reads()
     # benchmark_manual()
     # benchmark_random_reads()
@@ -430,7 +434,8 @@ for k in range(len(simulations)):
     cache_hits_end[k] = hits
     cache_misses_end[k] = misses
     hit_percent[k] = hits / (hits + misses) if (hits + misses) != 0 else 0.0
-
+print(f"Warum up instructions: {WARMUP_INSTRUCTIONS}")
+print(f"Size of L1 cache: {l1_cache_size}")
 print(simulations)
 print("Execution times:")
 min_value = min(Execution_Times)
