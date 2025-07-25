@@ -386,7 +386,8 @@ for k in range(len(simulations)):
 
     LLC = Cache(simulations[k][1], simulations[k][0], simulations[k][2],
                 simulations[k][3], simulations[k][4], simulations[k][5], type="data_cache")
-    # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
+    # def __init__(self, size, mem_size, lock_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
+
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
     mapping_str = "{0}-way associative".format(simulations[k][3])
