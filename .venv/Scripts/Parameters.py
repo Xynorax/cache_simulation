@@ -51,10 +51,10 @@ current_level = 0
 execution_time = 0
 cache_hit = False
 smart_set_indexing = False
-WARMUP_INSTRUCTIONS = 0
+WARMUP_INSTRUCTIONS = 2000000
 ################
 # Parameters
-TREE_ARITY = 32
+TREE_ARITY = 8
 TREE_ROOTS = 1
 TREE_ARITY_BITS = (TREE_ARITY - 1).bit_length()
 
