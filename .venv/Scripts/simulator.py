@@ -375,7 +375,7 @@ def benchmark_trace(MAX_INSTRUCTIONS):
                     MemoryAccess("read", src_addr, pc=program_counter)
 
 for k in range(len(simulations)):
-
+    l1_cache_size = 2 ** 15
     execution_time = 0  # Reset execution time for each simulation
     global hits
     hits = 0
@@ -383,11 +383,11 @@ for k in range(len(simulations)):
     misses = 0
     # memory = Memory(mem_size, block_size)
     memory = 0
-    print(f"Warum up instructions: {WARMUP_INSTRUCTIONS}")
+
     LLC = Cache(simulations[k][1], simulations[k][0], simulations[k][2],
                 simulations[k][3], simulations[k][4], simulations[k][5], type="data_cache")
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
-    l1cache = Cache(2 ** 15, simulations[k][0], simulations[k][2], 2 ** 4, "LRU", write_pol="WB",
+    l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
     mapping_str = "{0}-way associative".format(simulations[k][3])
     print("\nMemory size: " + str(mem_size) +
@@ -397,7 +397,7 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_trace(2000)
+    benchmark_trace(5000000)
     # benchmark_random_reads()
     # benchmark_manual()
     # benchmark_random_reads()
@@ -406,7 +406,8 @@ for k in range(len(simulations)):
     cache_hits_end[k] = hits
     cache_misses_end[k] = misses
     hit_percent[k] = hits / (hits + misses) if (hits + misses) != 0 else 0.0
-
+print(f"Warum up instructions: {WARMUP_INSTRUCTIONS}")
+print(f"Size of L1 cache: {l1_cache_size}")
 print(simulations)
 print("Execution times:")
 min_value = min(Execution_Times)
