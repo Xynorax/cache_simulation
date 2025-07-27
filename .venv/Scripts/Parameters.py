@@ -22,7 +22,7 @@ simulations = {}
 # Memory_size, Cache_size, Block_size, mapping, replace_policy, write_policy
 # simulations[0] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 0, "LRU", "WB"]
 # simulations[1] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 1, "LRU", "WB"]
-simulations[0] = [mem_size, cache_size, block_size, 2 ** 3, "ship_plus", "WB", ctr_cache_size, "ship_plus"]
+simulations[0] = [mem_size, cache_size, block_size, 2 ** 3, "RLR", "WB", ctr_cache_size, "RLR"]
 # simulations[3] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 3, "LRU", "WB"]
 # simulations[4] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 4, "LRU", "WB"]
 
@@ -54,10 +54,11 @@ execution_time = 0
 cache_hit = False
 smart_set_indexing = False
 WARMUP_INSTRUCTIONS = 2000000
+
 ################
 # Parameters
 TREE_ARITY = 8
-TREE_ROOTS = 1
+TREE_ROOTS = 8
 TREE_ARITY_BITS = (TREE_ARITY - 1).bit_length()
 
 MEMORY_START_ADDR = 0

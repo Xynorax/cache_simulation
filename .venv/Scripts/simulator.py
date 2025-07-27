@@ -10,6 +10,21 @@ from translation import *
 def read(address, memory, cache, pc, level=TREE_LEVELS):
     """Read a byte from cache."""
     cache_block = cache.read(address, pc)
+    global cc_set_access_counter
+    global dc_set_access_counter
+    global cc_set_eviction_counter
+    global dc_set_eviction_counter
+    global LLC_total_set_access_counter
+    global LLC_dc_set_access_counter
+    global LLC_cc_set_access_counter
+    if cache._type == "level1_cc":
+        set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
+        set_num = (address >> cache._set_shift) & set_mask
+        cc_set_access_counter[set_num][level] += 1
+    elif cache._type == "level1":
+        set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
+        set_num = (address >> cache._set_shift) & set_mask
+        dc_set_access_counter[set_num] += 1
 
     global execution_time
     global instructions_number
@@ -42,12 +57,19 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
         block = bytearray(8)
         if cache._type == "level1":
             cache.load(address, block, pc)
+            set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
+            set_num = (address >> cache._set_shift) & set_mask
+            dc_set_miss_counter[set_num] += 1
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
                 l1_misses += 1
             return 0
         # block = memory.get_block(address)
         if cache._type == "level1_cc":
+            cache.load(address, block, pc)
+            set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
+            set_num = (address >> cache._set_shift) & set_mask
+            cc_set_miss_counter[set_num][level] += 1
             if instructions_number > WARMUP_INSTRUCTIONS:
                 if level < TREE_LEVELS:
                     level_misses_l1[level] += 1
@@ -58,13 +80,22 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
             victim_info = cache.load(address, block, pc)
             # if victim_info:
             # memory.set_block(victim_info[0], victim_info[1])
-        if instructions_number > WARMUP_INSTRUCTIONS:
-            if cache._type == "data_cache":
+
+        if cache._type == "data_cache":
+            set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
+            set_num = (address >> cache._set_shift) & set_mask
+            if level == TREE_LEVELS:
+                LLC_dc_set_miss_counter[set_num] += 1
+            else:
+                LLC_cc_set_miss_counter[set_num][level] += 1
+            LLC_total_set_miss_counter[set_num] += 1
+            if instructions_number > WARMUP_INSTRUCTIONS:
                 global misses
                 misses += 1
                 if level < TREE_LEVELS:
                     level_misses[level] += 1
-            elif cache._type == "ctr_cache":
+        elif cache._type == "ctr_cache":
+            if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_misses
                 ctr_cache_misses += 1
 
@@ -83,6 +114,20 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
     global write_misses
     global write_hits
     global instructions_number
+    global cc_set_access_counter
+    global dc_set_access_counter
+    global LLC_total_set_access_counter
+    global LLC_dc_set_access_counter
+    global LLC_cc_set_access_counter
+
+    if cache._type == "level1_cc":
+        set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
+        set_num = (address >> cache._set_shift) & set_mask
+        cc_set_access_counter[set_num][level] += 1
+    elif cache._type == "level1":
+        set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
+        set_num = (address >> cache._set_shift) & set_mask
+        dc_set_access_counter[set_num] += 1
     if written:
         if cache._type == "data_cache":
             if instructions_number > WARMUP_INSTRUCTIONS:
@@ -106,13 +151,24 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             elif cache._type == "data_cache":
                 level_hits[level] += 1
     else:
+        block = bytearray(8)
         if cache._type == "data_cache":
+            set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
+            set_num = (address >> cache._set_shift) & set_mask
+            if level == TREE_LEVELS:
+                LLC_dc_set_miss_counter[set_num] += 1
+            else:
+                LLC_cc_set_miss_counter[set_num][level] += 1
+            LLC_total_set_miss_counter[set_num] += 1
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global misses
                 misses += 1
                 if level < TREE_LEVELS:
                     level_misses[level] += 1
         elif cache._type == "level1_cc":
+            set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
+            set_num = (address >> cache._set_shift) & set_mask
+            cc_set_miss_counter[set_num][level] += 1
             cache.load(address, block, pc, WB_insertion=1)
             cache.write(address, byte, pc)
             if instructions_number > WARMUP_INSTRUCTIONS:
@@ -122,6 +178,9 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
                     level_misses_l1[level] += 1
             return 0
         elif cache._type == "level1":
+            set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
+            set_num = (address >> cache._set_shift) & set_mask
+            dc_set_miss_counter[set_num] += 1
             cache.load(address, block, pc, WB_insertion=1)
             cache.write(address, byte, pc)
             if instructions_number > WARMUP_INSTRUCTIONS:
@@ -296,12 +355,19 @@ def benchmark_random_reads():  ##Benchmark 1 - random read access
 
 
 def benchmark_manual():  ##Benchmark 2 - Manually inputed values
+    global instructions_number
+    instructions_number = 999999999
     size = 2  # array length
     array = [123]
     # for i in range(len(array)):
     MemoryAccess("read", 0)
-    MemoryAccess("read", 7)
-    MemoryAccess("read", 63)
+    MemoryAccess("read", (mem_size // 2) // 8)
+    MemoryAccess("read", (mem_size // 2) * 7 // 8)
+    MemoryAccess("read", (mem_size // 2) * 6 // 8)
+    MemoryAccess("read", (mem_size // 2) * 5 // 8)
+    MemoryAccess("read", (mem_size // 2) * 4 // 8)
+    MemoryAccess("read", (mem_size // 2) * 3 // 8)
+    MemoryAccess("read", (mem_size // 2) * 2 // 8)
     initiate_command("stats")
     # initiate_command("printmem 0 20")
     # initiate_command("printcache 0 20")
@@ -399,7 +465,25 @@ def benchmark_trace(MAX_INSTRUCTIONS):
                     MemoryAccess("read", src_addr, pc=program_counter)
 
 for k in range(len(simulations)):
-    l1_cache_size = 2 ** 15
+    l1_cache_size = (2 ** 15) // 2
+    global cc_set_access_counter
+    global dc_set_access_counter
+    levels_array = TREE_LEVELS * [0]
+    cc_set_access_counter = [[0 for _ in range(TREE_LEVELS)] for _ in range((l1_cache_size // block_size) // 4)]
+    dc_set_access_counter = ((l1_cache_size // block_size) // 4) * [0]
+
+    global LLC_total_set_miss_counter
+    global LLC_dc_set_miss_counter
+    global LLC_cc_set_miss_counter
+    LLC_total_set_miss_counter = ((simulations[k][1] // block_size) // 4) * [0]
+    LLC_dc_set_miss_counter = ((simulations[k][1] // block_size) // 4) * [0]
+    LLC_cc_set_miss_counter = [[0 for _ in range(TREE_LEVELS)] for _ in range((simulations[k][1] // block_size) // 4)]
+
+    global dc_set_miss_counter
+    global cc_set_miss_counter
+    cc_set_miss_counter = [[0 for _ in range(TREE_LEVELS)] for _ in range((l1_cache_size // block_size) // 4)]
+    dc_set_miss_counter = ((l1_cache_size // block_size) // 4) * [0]
+
     execution_time = 0  # Reset execution time for each simulation
     global hits
     hits = 0
@@ -412,10 +496,10 @@ for k in range(len(simulations)):
                 simulations[k][3], simulations[k][4], simulations[k][5], type="data_cache")
     # def __init__(self, size, mem_size, lock_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
-    l1cache = Cache(l1_cache_size//2, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
+    l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
-    l1_cache_cc = Cache(l1_cache_size//2, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
-                        type="level1_CC")
+    l1_cache_cc = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
+                        type="level1_cc")
 
     mapping_str = "{0}-way associative".format(simulations[k][3])
     print("\nMemory size: " + str(mem_size) +
@@ -434,7 +518,7 @@ for k in range(len(simulations)):
     cache_hits_end[k] = hits
     cache_misses_end[k] = misses
     hit_percent[k] = hits / (hits + misses) if (hits + misses) != 0 else 0.0
-print(f"Warum up instructions: {WARMUP_INSTRUCTIONS}")
+print(f"Warm up instructions: {WARMUP_INSTRUCTIONS}")
 print(f"Size of L1 cache: {l1_cache_size}")
 print(simulations)
 print("Execution times:")
@@ -466,3 +550,23 @@ print("Counter Level hits in L1 CC Cache:")
 print(level_hits_l1)
 print("Counter Level misses in L1 CC Cache:")
 print(level_misses_l1)
+
+print("Tree Levels:")
+print(TREE_LEVELS)
+
+print("DC set access counter")
+print(dc_set_access_counter)
+print("CC set access counter")
+print(cc_set_access_counter)
+
+print("LLC Total set miss counter")
+print(LLC_total_set_miss_counter)
+print("LLC DC set miss counter")
+print(LLC_dc_set_miss_counter)
+print("LLC CC set miss counter")
+print(LLC_cc_set_miss_counter)
+
+print("DC set miss counter")
+print(dc_set_access_counter)
+print("CC set miss counter")
+print(cc_set_miss_counter)
