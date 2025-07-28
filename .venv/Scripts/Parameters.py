@@ -85,3 +85,5 @@ level_misses_l1 = [0] * TREE_LEVELS
 level_hits = [0] * TREE_LEVELS
 level_misses = [0] * TREE_LEVELS
 level_access_counter = [0] * TREE_LEVELS
+LLC_ctr_level_hits = [0] * TREE_LEVELS
+LLC_ctr_level_misses = [0] * TREE_LEVELS

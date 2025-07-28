@@ -44,7 +44,9 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
         elif cache._type == "ctr_cache":
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_hits
+                global LLC_ctr_level_hits
                 ctr_cache_hits += 1
+                LLC_ctr_level_hits[level] += 1
         if instructions_number > WARMUP_INSTRUCTIONS and level < TREE_LEVELS:
             if cache._type == "level1_cc":
                 level_hits_l1[level] += 1
@@ -99,6 +101,8 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_misses
                 ctr_cache_misses += 1
+                global LLC_ctr_level_misses
+                LLC_ctr_level_misses[level] += 1
 
 
 
@@ -145,7 +149,9 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
         elif cache._type == "ctr_cache":
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_hits
+                global LLC_ctr_level_hits
                 ctr_cache_hits += 1
+                LLC_ctr_level_hits[level] += 1
         if instructions_number > WARMUP_INSTRUCTIONS and level < TREE_LEVELS:
             if cache._type == "level1_cc":
                 level_hits_l1[level] += 1
@@ -194,6 +200,8 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_misses
                 ctr_cache_misses += 1
+                global LLC_ctr_level_misses
+                LLC_ctr_level_misses[level] += 1
 
         # execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
     if write_policy == Cache.WRITE_THROUGH:  # or level > 0 Flipped because levels are flipped in the array
@@ -563,6 +571,10 @@ print(ctr_cache_hits)
 print("LLC Counter cache misses")
 print(ctr_cache_misses)
 print(ctr_cache_hits / (ctr_cache_hits + ctr_cache_misses))
+print("Counter level hits in LLC counter cache")
+print(LLC_ctr_level_hits)
+print("Counter level misses in LLC counter cache")
+print(LLC_ctr_level_misses)
 
 # print("DC set access counter")
 # print(dc_set_access_counter)
@@ -571,15 +583,15 @@ print(ctr_cache_hits / (ctr_cache_hits + ctr_cache_misses))
 
 # print("LLC Total set miss counter")
 #print(LLC_total_set_miss_counter)
-print("LLC DC set miss counter")
-print(LLC_dc_set_miss_counter)
+# print("LLC DC set miss counter")
+# print(LLC_dc_set_miss_counter)
 # print("LLC CC set miss counter")
 #print(LLC_cc_set_miss_counter)
 
-print("DC set miss counter")
-print(dc_set_miss_counter)
-print("CC set miss counter")
-print(cc_set_miss_counter)
+# print("DC set miss counter")
+# print(dc_set_miss_counter)
+# print("CC set miss counter")
+#print(cc_set_miss_counter)
 
-print("LLC CC set miss counter")
-print(LLC_cc_set_miss_counter)
+# print("LLC CC set miss counter")
+#print(LLC_cc_set_miss_counter)
