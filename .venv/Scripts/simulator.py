@@ -235,7 +235,14 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
                 read(address, memory, LLC, pc, level_inversed)
         else:
             if read(address, memory, l1_cache_cc, pc, level_inversed) == 0:
-                read(address, memory, LLC_ctr, pc, level_inversed)
+                if level_inversed == TREE_LEVELS - 1:
+                    read(address, memory, LLC_ctr_0, pc, level_inversed)
+                elif level_inversed == TREE_LEVELS - 2:
+                    read(address, memory, LLC_ctr_1, pc, level_inversed)
+                elif level_inversed == TREE_LEVELS - 3:
+                    read(address, memory, LLC_ctr_2, pc, level_inversed)
+                else:
+                    read(address, memory, LLC_ctr_3, pc, level_inversed)
 
         print(f" read from " +
               util.bin_str(address, MEMORY), f"{address}")
@@ -248,8 +255,14 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
                 write(address, byte, memory, LLC, pc, level_inversed)
         else:
             if write(address, byte, memory, l1_cache_cc, pc, level_inversed) == 0:
-                write(address, byte, memory, LLC_ctr, pc, level_inversed)
-
+                if level_inversed == TREE_LEVELS - 1:
+                    write(address, byte, memory, LLC_ctr_0, pc, level_inversed)
+                elif level_inversed == TREE_LEVELS - 2:
+                    write(address, byte, memory, LLC_ctr_1, pc, level_inversed)
+                elif level_inversed == TREE_LEVELS - 3:
+                    write(address, byte, memory, LLC_ctr_2, pc, level_inversed)
+                else:
+                    write(address, byte, memory, LLC_ctr_3, pc, level_inversed)
         print(" written to " +
               util.bin_str(address, MEMORY), f"{address}")
 
@@ -506,8 +519,14 @@ for k in range(len(simulations)):
                 simulations[k][3], simulations[k][4], simulations[k][5], type="data_cache")
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
-    LLC_ctr = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                    simulations[k][3], replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
+    LLC_ctr_0 = Cache(simulations[k][1] // 4, simulations[k][0], simulations[k][2],
+                      simulations[k][3], replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
+    LLC_ctr_1 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
+                      simulations[k][3], replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
+    LLC_ctr_2 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
+                      simulations[k][3], replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
+    LLC_ctr_3 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
+                      simulations[k][3], replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
 
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
