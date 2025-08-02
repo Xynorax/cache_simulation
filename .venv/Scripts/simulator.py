@@ -297,6 +297,9 @@ class MemoryAccess:
         self._pc = pc
         if access_type == "read":
             initiate_command(f"read {address}", False, self._pc)
+            if (cache_hit):
+                cache_hit = False
+                return
         elif access_type == "write":
             initiate_command(f"read {address}", False, self._pc)
             initiate_command(f"write {address} {self.byte}", False, self._pc)
