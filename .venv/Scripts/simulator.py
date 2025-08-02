@@ -305,12 +305,16 @@ class MemoryAccess:
         self.counter_addresses = [0] * (TREE_LEVELS)
         self.byte = byte
         self._pc = pc
+        global cache_hit
         if access_type == "read":
             initiate_command(f"read {address}", False, self._pc)
+            if (cache_hit):
+                cache_hit = False
+                return
         elif access_type == "write":
             initiate_command(f"read {address}", False, self._pc)
             initiate_command(f"write {address} {self.byte}", False, self._pc)
-        global cache_hit
+
         cache_hit = False
         root_index = int((address - MEMORY_START_ADDR) // IND_TREE_SIZE)
         tree_offset = int(root_index * IND_TREE_SIZE)
@@ -507,7 +511,7 @@ for k in range(len(simulations)):
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
     LLC_ctr = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                    simulations[k][3], replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
+                    mapping_pol=2 ** 4, replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
 
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
@@ -522,7 +526,7 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_trace(5000000)
+    benchmark_trace(2500000)
     # benchmark_random_reads()
     # benchmark_manual()
     # benchmark_random_reads()
