@@ -213,12 +213,16 @@ class MemoryAccess:
         self.counter_addresses = [0] * (TREE_LEVELS)
         self.byte = byte
         self._pc = pc
+        global cache_hit
         if access_type == "read":
             initiate_command(f"read {address}", False, self._pc)
+            if (cache_hit):
+                cache_hit = False
+                return
         elif access_type == "write":
             initiate_command(f"read {address}", False, self._pc)
             initiate_command(f"write {address} {self.byte}", False, self._pc)
-        global cache_hit
+
         cache_hit = False
         root_index = int((address - MEMORY_START_ADDR) // IND_TREE_SIZE)
         tree_offset = int(root_index * IND_TREE_SIZE)
