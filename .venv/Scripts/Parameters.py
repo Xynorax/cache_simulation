@@ -52,7 +52,7 @@ write_misses = 0
 current_level = 0
 execution_time = 0
 cache_hit = False
-smart_set_indexing = False
+smart_set_indexing = True
 WARMUP_INSTRUCTIONS = 1000000
 
 ################
