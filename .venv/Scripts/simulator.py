@@ -234,15 +234,14 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
             if read(address, memory, l1cache, pc, level_inversed) == 0:
                 read(address, memory, LLC, pc, level_inversed)
         else:
-            if read(address, memory, l1_cache_cc, pc, level_inversed) == 0:
-                if level_inversed == TREE_LEVELS - 1:
-                    read(address, memory, LLC_ctr_0, pc, level_inversed)
-                elif level_inversed == TREE_LEVELS - 2:
-                    read(address, memory, LLC_ctr_1, pc, level_inversed)
-                elif level_inversed == TREE_LEVELS - 3:
-                    read(address, memory, LLC_ctr_2, pc, level_inversed)
-                else:
-                    read(address, memory, LLC_ctr_3, pc, level_inversed)
+            if level_inversed == TREE_LEVELS - 1:
+                read(address, memory, LLC_ctr_0, pc, level_inversed)
+            elif level_inversed == TREE_LEVELS - 2:
+                read(address, memory, LLC_ctr_1, pc, level_inversed)
+            elif level_inversed == TREE_LEVELS - 3:
+                read(address, memory, LLC_ctr_2, pc, level_inversed)
+            else:
+                read(address, memory, LLC_ctr_3, pc, level_inversed)
 
         print(f" read from " +
               util.bin_str(address, MEMORY), f"{address}")
@@ -254,15 +253,14 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
             if write(address, byte, memory, l1cache, pc, level_inversed) == 0:
                 write(address, byte, memory, LLC, pc, level_inversed)
         else:
-            if write(address, byte, memory, l1_cache_cc, pc, level_inversed) == 0:
-                if level_inversed == TREE_LEVELS - 1:
-                    write(address, byte, memory, LLC_ctr_0, pc, level_inversed)
-                elif level_inversed == TREE_LEVELS - 2:
-                    write(address, byte, memory, LLC_ctr_1, pc, level_inversed)
-                elif level_inversed == TREE_LEVELS - 3:
-                    write(address, byte, memory, LLC_ctr_2, pc, level_inversed)
-                else:
-                    write(address, byte, memory, LLC_ctr_3, pc, level_inversed)
+            if level_inversed == TREE_LEVELS - 1:
+                write(address, byte, memory, LLC_ctr_0, pc, level_inversed)
+            elif level_inversed == TREE_LEVELS - 2:
+                write(address, byte, memory, LLC_ctr_1, pc, level_inversed)
+            elif level_inversed == TREE_LEVELS - 3:
+                write(address, byte, memory, LLC_ctr_2, pc, level_inversed)
+            else:
+                write(address, byte, memory, LLC_ctr_3, pc, level_inversed)
         print(" written to " +
               util.bin_str(address, MEMORY), f"{address}")
 
@@ -318,6 +316,7 @@ class MemoryAccess:
         self.counter_addresses = [0] * (TREE_LEVELS)
         self.byte = byte
         self._pc = pc
+        global cache_hit
         if access_type == "read":
             initiate_command(f"read {address}", False, self._pc)
             if (cache_hit):
@@ -326,7 +325,7 @@ class MemoryAccess:
         elif access_type == "write":
             initiate_command(f"read {address}", False, self._pc)
             initiate_command(f"write {address} {self.byte}", False, self._pc)
-        global cache_hit
+
         cache_hit = False
         root_index = int((address - MEMORY_START_ADDR) // IND_TREE_SIZE)
         tree_offset = int(root_index * IND_TREE_SIZE)
@@ -533,8 +532,7 @@ for k in range(len(simulations)):
 
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
-    l1_cache_cc = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
-                        type="level1_cc")
+    # l1_cache_cc = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",type="level1_cc")
 
     mapping_str = "{0}-way associative".format(simulations[k][3])
     print("\nMemory size: " + str(mem_size) +
@@ -544,7 +542,7 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_trace(5000000)
+    benchmark_trace(20000000)
     # benchmark_random_reads()
     # benchmark_manual()
     # benchmark_random_reads()
