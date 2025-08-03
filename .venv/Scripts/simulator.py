@@ -506,6 +506,7 @@ for k in range(len(simulations)):
     # memory = Memory(mem_size, block_size)
     memory = 0
 
+
     LLC = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
                 simulations[k][3], simulations[k][4], simulations[k][5], type="data_cache")
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
@@ -526,7 +527,7 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_trace(2500000)
+    benchmark_trace(20000000)
     # benchmark_random_reads()
     # benchmark_manual()
     # benchmark_random_reads()

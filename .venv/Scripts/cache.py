@@ -341,18 +341,23 @@ class Cache:
 
         :param int address: memory address to get set from
         """
-        if self._type == "data_cache" or smart_set_indexing == False:
-            set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+        set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+        if self._type == "data_cache" or self._type == "level1" or self._type == "ctr_cache" or smart_set_indexing == False:
+
             set_num = (address >> self._set_shift) & set_mask
 
-        else:
-            # bit_28 = (address >> 28) & 0b1
-            # bit_23 = (address >> 23) & 0b1
-            # bit_18 = (address >> 18) & 0b1
-            bit_14 = (address >> 15) & 0b1
-            last_bits = ((bit_14 << 6) | (address >> 6) & 0b111111)
-            set_num = last_bits
-            if set_num == 128:
+        elif self._type == "level1_cc":
+            bit_3 = (address >> 3) & 0b1
+            bit_4 = (address >> 4) & 0b1
+            bit_5 = (address >> 5) & 0b1
+            bit_6 = (address >> 6) & 0b1
+            bit_7 = (address >> 7) & 0b1
+            bit_10 = (address >> 10) & 0b1
+            bit_11 = (address >> 11) & 0b1
+            bit_12 = (address >> 12) & 0b1
+            bit_15 = (address >> 15) & 0b1
+            set_num = (bit_12 << 5 | bit_11 << 4 | bit_10 << 3 | bit_7 << 2 | bit_6 << 1 | bit_5)
+            if set_num > set_mask:
                 raise ValueError("Set number = -1")
         index = set_num * self._mapping_pol
         return self._lines[index:index + self._mapping_pol]
