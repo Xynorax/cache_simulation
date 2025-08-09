@@ -54,7 +54,10 @@ execution_time = 0
 cache_hit = False
 smart_set_indexing = False
 WARMUP_INSTRUCTIONS = 1000000
-
+level0_cc_trace = []
+level1_cc_trace = []
+level2_cc_trace = []
+level3_cc_trace = []
 ################
 # Parameters
 TREE_ARITY = 8

@@ -323,17 +323,22 @@ class Cache:
 
         :param int address: memory address to get tag from
         """
-        if self._type == "data_cache" or smart_set_indexing == False:
+        if self._type == "data_cache" or self._type == "level1" or smart_set_indexing == False:
             return address >> self._tag_shift
         else:
-            # group1 = (address >> 29) & 0b1111
-            # group2 = (address >> 24) & 0b1111
-            # group3 = (address >> 19) & 0b1111
-            # group4 = (address >> 14) & 0b1111
-            # group5 = (address >> 9) & 0b1111
-            group1 = (address >> 16) & 0b111111111111111111
-            group2 = (address >> 12) & 0b111
-            tag = ((group1 << 3) | group2)
+            if self._size == 262144:
+                # take bits 9 and 13 to 32 as the tag
+                # Bits 13-32 are 20 bits. Bit 9 is 1 bit. Total tag is 21 bits.
+                tag = ((address >> 13) << 1) | ((address >> 9) & 1)
+            elif self._size == 131072:
+                # take bits 10, 11, 12 and 14 to 32 as the tag
+                # Bits 14-32 are 19 bits. Bits 10, 11, 12 are 3 bits. Total tag is 22 bits.
+                tag = ((address >> 14) << 3) | (((address >> 12) & 1) << 2) | (((address >> 11) & 1) << 1) | (
+                        (address >> 10) & 1)
+            else:
+                # take bits 9 and 11 to 32 as the tag
+                # Bits 11-32 are 22 bits. Bit 9 is 1 bit. Total tag is 23 bits.
+                tag = ((address >> 11) << 1) | ((address >> 9) & 1)
             return tag
 
     def _get_set(self, address):
@@ -341,18 +346,33 @@ class Cache:
 
         :param int address: memory address to get set from
         """
-        if self._type == "data_cache" or smart_set_indexing == False:
-            set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+        set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+        if self._type == "data_cache" or self._type == "level1" or smart_set_indexing == False:
             set_num = (address >> self._set_shift) & set_mask
 
         else:
-            # bit_28 = (address >> 28) & 0b1
-            # bit_23 = (address >> 23) & 0b1
-            # bit_18 = (address >> 18) & 0b1
-            bit_14 = (address >> 15) & 0b1
-            last_bits = ((bit_14 << 6) | (address >> 6) & 0b111111)
-            set_num = last_bits
-            if set_num == 128:
+            bit_3 = (address >> 3) & 0b1
+            bit_4 = (address >> 4) & 0b1
+            bit_5 = (address >> 5) & 0b1
+            bit_6 = (address >> 6) & 0b1
+            bit_7 = (address >> 7) & 0b1
+            bit_8 = (address >> 8) & 0b1
+            bit_9 = (address >> 9) & 0b1
+            bit_10 = (address >> 10) & 0b1
+            bit_11 = (address >> 11) & 0b1
+            bit_12 = (address >> 12) & 0b1
+            bit_13 = (address >> 13) & 0b1
+            bit_14 = (address >> 14) & 0b1
+            bit_15 = (address >> 15) & 0b1
+            if self._size == 262144:
+                set_num = (
+                            bit_12 << 8 | bit_11 << 7 | bit_10 << 6 | bit_8 << 5 | bit_7 << 4 | bit_6 << 3 | bit_5 << 2 | bit_4 << 1 | bit_3)
+            elif self._size == 131072:
+                set_num = (
+                            bit_13 << 7 | bit_9 << 6 | bit_8 << 5 | bit_7 << 4 | bit_6 << 3 | bit_5 << 2 | bit_4 << 1 | bit_3)
+            else:
+                set_num = (address >> self._set_shift) & set_mask
+            if set_num > set_mask:
                 raise ValueError("Set number = -1")
         index = set_num * self._mapping_pol
         return self._lines[index:index + self._mapping_pol]

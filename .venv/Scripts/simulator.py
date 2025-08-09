@@ -235,12 +235,20 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
                 read(address, memory, LLC, pc, level_inversed)
         else:
             if level_inversed == TREE_LEVELS - 1:
+                line = f"{address}\n"
+                level0_cc_trace.append(line)
                 read(address, memory, LLC_ctr_0, pc, level_inversed)
             elif level_inversed == TREE_LEVELS - 2:
+                line = f"{address}\n"
+                level1_cc_trace.append(line)
                 read(address, memory, LLC_ctr_1, pc, level_inversed)
             elif level_inversed == TREE_LEVELS - 3:
+                line = f"{address}\n"
+                level2_cc_trace.append(line)
                 read(address, memory, LLC_ctr_2, pc, level_inversed)
             else:
+                line = f"{address}\n"
+                level3_cc_trace.append(line)
                 read(address, memory, LLC_ctr_3, pc, level_inversed)
 
         print(f" read from " +
@@ -254,12 +262,20 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
                 write(address, byte, memory, LLC, pc, level_inversed)
         else:
             if level_inversed == TREE_LEVELS - 1:
+                line = f"{address}\n"
+                level0_cc_trace.append(line)
                 write(address, byte, memory, LLC_ctr_0, pc, level_inversed)
             elif level_inversed == TREE_LEVELS - 2:
+                line = f"{address}\n"
+                level1_cc_trace.append(line)
                 write(address, byte, memory, LLC_ctr_1, pc, level_inversed)
             elif level_inversed == TREE_LEVELS - 3:
+                line = f"{address}\n"
+                level2_cc_trace.append(line)
                 write(address, byte, memory, LLC_ctr_2, pc, level_inversed)
             else:
+                line = f"{address}\n"
+                level3_cc_trace.append(line)
                 write(address, byte, memory, LLC_ctr_3, pc, level_inversed)
         print(" written to " +
               util.bin_str(address, MEMORY), f"{address}")
@@ -522,13 +538,13 @@ for k in range(len(simulations)):
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
     LLC_ctr_0 = Cache(simulations[k][1] // 4, simulations[k][0], simulations[k][2],
-                      simulations[k][3], replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
+                      2 ** 2, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
     LLC_ctr_1 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
-                      simulations[k][3], replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
+                      simulations[k][3], replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
     LLC_ctr_2 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                      simulations[k][3], replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
+                      simulations[k][3], replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
     LLC_ctr_3 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                      simulations[k][3], replace_pol=simulations[k][7], write_pol=simulations[k][5], type="ctr_cache")
+                      simulations[k][3], replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
@@ -542,7 +558,7 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_trace(20000000)
+    benchmark_trace(5000000)
     # benchmark_random_reads()
     # benchmark_manual()
     # benchmark_random_reads()
@@ -551,6 +567,15 @@ for k in range(len(simulations)):
     cache_hits_end[k] = hits
     cache_misses_end[k] = misses
     hit_percent[k] = hits / (hits + misses) if (hits + misses) != 0 else 0.0
+
+with open("level0_cc_trace.txt", 'w') as file:
+    file.writelines(level0_cc_trace)
+with open("level1_cc_trace.txt", 'w') as file:
+    file.writelines(level1_cc_trace)
+with open("level2_cc_trace.txt", 'w') as file:
+    file.writelines(level2_cc_trace)
+with open("level3_cc_trace.txt", 'w') as file:
+    file.writelines(level3_cc_trace)
 print(f"Warm up instructions: {WARMUP_INSTRUCTIONS}")
 print(f"Size of L1 cache: {l1_cache_size}")
 print(simulations)
