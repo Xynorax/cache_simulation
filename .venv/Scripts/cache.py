@@ -325,7 +325,7 @@ class Cache:
         """
         if self._type == "data_cache" or self._type == "level1" or self._type == "ctr_cache" or smart_set_indexing == False:
             return address >> self._tag_shift
-        else:
+        elif self._type == "level1_cc":
             # group1 = (address >> 29) & 0b1111
             # group2 = (address >> 24) & 0b1111
             # group3 = (address >> 19) & 0b1111
@@ -333,7 +333,7 @@ class Cache:
             # group5 = (address >> 9) & 0b1111
             group1 = (address >> 16) & 0b111111111111111111
             group2 = (address >> 12) & 0b111
-            tag = (address >> 13) << 2 | ((address >> 9) & 0b1) << 1 | ((address >> 8) & 0b1)
+            tag = (address >> 14) << 2 | ((address >> 12) & 0b1) << 1 | ((address >> 9) & 0b1)
             return tag
 
     def _get_set(self, address):
@@ -352,11 +352,13 @@ class Cache:
             bit_5 = (address >> 5) & 0b1
             bit_6 = (address >> 6) & 0b1
             bit_7 = (address >> 7) & 0b1
+            bit_8 = (address >> 8) & 0b1
             bit_10 = (address >> 10) & 0b1
             bit_11 = (address >> 11) & 0b1
             bit_12 = (address >> 12) & 0b1
+            bit_13 = (address >> 13) & 0b1
             bit_15 = (address >> 15) & 0b1
-            set_num = (bit_12 << 5 | bit_11 << 4 | bit_10 << 3 | bit_7 << 2 | bit_6 << 1 | bit_5)
+            set_num = (bit_13 << 5 | bit_11 << 4 | bit_10 << 3 | bit_8 << 2 | bit_7 << 1 | bit_6)
             if set_num > set_mask:
                 raise ValueError("Set number = -1")
         index = set_num * self._mapping_pol
