@@ -527,7 +527,7 @@ for k in range(len(simulations)):
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
 
-    benchmark_trace(5000000)
+    benchmark_trace(2500000)
     # benchmark_random_reads()
     # benchmark_manual()
     # benchmark_random_reads()
