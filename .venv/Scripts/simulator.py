@@ -97,7 +97,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
         elif cache._type == "ctr_cache":
             set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
             set_num = (address >> cache._set_shift) & set_mask
-            LLC_cc_set_miss_counter[set_num][level] += 1
+            # LLC_cc_set_miss_counter[set_num][level] += 1
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_misses
                 ctr_cache_misses += 1
@@ -196,7 +196,7 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
         elif cache._type == "ctr_cache":
             set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
             set_num = (address >> cache._set_shift) & set_mask
-            LLC_cc_set_miss_counter[set_num][level] += 1
+            #LLC_cc_set_miss_counter[set_num][level] += 1
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_misses
                 ctr_cache_misses += 1
@@ -234,22 +234,7 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
             if read(address, memory, l1cache, pc, level_inversed) == 0:
                 read(address, memory, LLC, pc, level_inversed)
         else:
-            if level_inversed == TREE_LEVELS - 1:
-                line = f"{address}\n"
-                level0_cc_trace.append(line)
-                read(address, memory, LLC_ctr_0, pc, level_inversed)
-            elif level_inversed == TREE_LEVELS - 2:
-                line = f"{address}\n"
-                level1_cc_trace.append(line)
-                read(address, memory, LLC_ctr_1, pc, level_inversed)
-            elif level_inversed == TREE_LEVELS - 3:
-                line = f"{address}\n"
-                level2_cc_trace.append(line)
-                read(address, memory, LLC_ctr_2, pc, level_inversed)
-            else:
-                line = f"{address}\n"
-                level3_cc_trace.append(line)
-                read(address, memory, LLC_ctr_3, pc, level_inversed)
+            read(address, memory, LLC_ctr, pc, level_inversed)
 
         print(f" read from " +
               util.bin_str(address, MEMORY), f"{address}")
@@ -261,22 +246,7 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
             if write(address, byte, memory, l1cache, pc, level_inversed) == 0:
                 write(address, byte, memory, LLC, pc, level_inversed)
         else:
-            if level_inversed == TREE_LEVELS - 1:
-                line = f"{address}\n"
-                level0_cc_trace.append(line)
-                write(address, byte, memory, LLC_ctr_0, pc, level_inversed)
-            elif level_inversed == TREE_LEVELS - 2:
-                line = f"{address}\n"
-                level1_cc_trace.append(line)
-                write(address, byte, memory, LLC_ctr_1, pc, level_inversed)
-            elif level_inversed == TREE_LEVELS - 3:
-                line = f"{address}\n"
-                level2_cc_trace.append(line)
-                write(address, byte, memory, LLC_ctr_2, pc, level_inversed)
-            else:
-                line = f"{address}\n"
-                level3_cc_trace.append(line)
-                write(address, byte, memory, LLC_ctr_3, pc, level_inversed)
+            write(address, byte, memory, LLC_ctr, pc, level_inversed)
         print(" written to " +
               util.bin_str(address, MEMORY), f"{address}")
 
@@ -545,7 +515,8 @@ for k in range(len(simulations)):
                       simulations[k][3], replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
     LLC_ctr_3 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
                       simulations[k][3], replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
-
+    LLC_ctr = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
+                    2 ** 2, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
     # l1_cache_cc = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",type="level1_cc")
