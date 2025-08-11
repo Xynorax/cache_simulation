@@ -2,6 +2,7 @@ import random
 from math import log
 
 import util
+from Parameters import TREE_LEVELS
 from Parameters import smart_set_indexing
 from line import Line
 
@@ -16,6 +17,7 @@ class Cache:
     RAND = "RAND"
     RLR = "RLR"
     ship_plus = "ship_plus"
+    modified_LRU = "modified_LRU"
     # Mapping policies
     WRITE_BACK = "WB"
     WRITE_THROUGH = "WT"
@@ -38,9 +40,9 @@ class Cache:
         self._set_shift = int(log(self._block_size, 2))
         if self._replace_pol == Cache.ship_plus:
             self._shct = self.SHCT()
-            # Track ~64 sampled sets (1-2% of total sets)
             total_sets = size // (block_size * mapping_pol)
-            self.sampled_sets = set(random.sample(range(total_sets), 16))
+            spacing = total_sets // 16
+            self.sampled_sets = {i for i in range(0, total_sets, spacing)}
 
     class SHCT:
         """
@@ -133,7 +135,7 @@ class Cache:
         # Update use bits of cache line
         if line:
             if (self._replace_pol == Cache.LRU or
-                    self._replace_pol == Cache.LFU):
+                    self._replace_pol == Cache.LFU or self._replace_pol == Cache.modified_LRU):
                 self._update_use(line, set)
             if (self._replace_pol == Cache.RLR):
                 self._update_rlr(line, set)
@@ -148,7 +150,7 @@ class Cache:
 
         return line.data if line else line
 
-    def load(self, address, data, pc, WB_insertion=0):
+    def load(self, address, data, pc, level, WB_insertion=0):
         """Load a block of memory into the cache.
 
         :param int address: memory address for data to load to cache
@@ -164,20 +166,19 @@ class Cache:
                 self._replace_pol == Cache.LFU or
                 self._replace_pol == Cache.FIFO):
             victim = set[0]
-
-            for index in range(len(set)):  # Check if a line in the set is free
-                if set[index].valid == 0:
-                    victim = set[index]
-                    break
-            if victim is None:
-                for index in range(len(set)):
-                    if set[index].use < victim.use:
-                        victim = set[index]
-
+            victim = self._find_victim(set)
             victim.use = 0
-
             if self._replace_pol == Cache.FIFO:
                 self._update_use(victim, set)
+        elif self._replace_pol == Cache.modified_LRU:
+            victim = set[0]
+            victim = self._find_victim(set)
+            victim.use = 0
+            for line in set:
+                if line.level < level and victim.use < line.use:
+                    victim.use = line.use + 1
+
+
         elif self._replace_pol == Cache.RAND:
             index = random.randint(0, self._mapping_pol - 1)
             victim = set[index]
@@ -200,13 +201,18 @@ class Cache:
                         item.rrpv += 1
             incoming_signature = self._shct.get_signature(pc)
             if WB_insertion == 1:
-                victim.rrpv = 3
+                victim.rrpv = 0
             elif self._shct.get_counter(incoming_signature) == 0:
                 victim.rrpv = 3
             elif self._shct.get_counter(incoming_signature) == self._shct.max_counter:
                 victim.rrpv = 0
             else:
-                victim.rrpv = 2
+                if level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2:
+                    victim.rrpv = 0
+                elif level == TREE_LEVELS - 3:
+                    victim.rrpv = 1
+                else:
+                    victim.rrpv = 2
             set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
             if victim.r == 0 and victim.valid and set_idx in self.sampled_sets:
                 self._shct.decrement_counter(victim.signature)
@@ -233,7 +239,7 @@ class Cache:
 
         # Store victim info if modified
         if victim.modified:
-            victim_info = (index, victim.data)
+            victim_info = (victim.data)
 
         # Replace victim
         victim.modified = 0
@@ -266,7 +272,8 @@ class Cache:
             line.modified = 1
 
             if (self._replace_pol == Cache.LRU or
-                    self._replace_pol == Cache.LFU):
+                    self._replace_pol == Cache.LFU or
+                    self._replace_pol == Cache.modified_LRU):
                 self._update_use(line, set)
             if (self._replace_pol == Cache.RLR):
                 self._update_rlr(line, set)
@@ -382,7 +389,7 @@ class Cache:
 
         :param line line: cache line to update use bits of
         """
-        if self._replace_pol == Cache.LRU:
+        if self._replace_pol == Cache.LRU or self._replace_pol == Cache.modified_LRU:
             # Set the current line as MRU (highest use value)
             line.use = max(line.use for line in set) + 1
         elif self._replace_pol == Cache.FIFO:
@@ -390,6 +397,19 @@ class Cache:
             pass
         elif self._replace_pol == Cache.LFU:
             line.use += 1
+
+    def _find_victim(self, set):
+        victim = None
+        for index in range(len(set)):  # Check if a line in the set is free
+            if set[index].valid == 0:
+                victim = set[index]
+                return victim
+        if victim is None:
+            victim = set[0]
+            for index in range(len(set)):
+                if set[index].use < victim.use:
+                    victim = set[index]
+            return victim
 
     def _update_rlr(self, line, set):
         line.preuse_distance = line.age_counter

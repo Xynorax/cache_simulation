@@ -14,3 +14,4 @@ class Line:
         self.rrpv = 3
         self.r = 0
         self.signature = 0
+        self.level = 0

@@ -58,7 +58,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
     else:
         block = bytearray(8)
         if cache._type == "level1":
-            cache.load(address, block, pc)
+            cache.load(address, block, pc, level=level)
             set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
             set_num = (address >> cache._set_shift) & set_mask
             dc_set_miss_counter[set_num] += 1
@@ -67,8 +67,8 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 l1_misses += 1
             return 0
         # block = memory.get_block(address)
-        if cache._type == "level1_cc":
-            cache.load(address, block, pc)
+        elif cache._type == "level1_cc":
+            cache.load(address, block, pc, level=level)
             set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
             set_num = (address >> cache._set_shift) & set_mask
             cc_set_miss_counter[set_num][level] += 1
@@ -79,7 +79,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 l1_misses_cc += 1
             return 0
         if level > -1:  # flipped because levels are flipped in the array
-            victim_info = cache.load(address, block, pc)
+            victim_info = cache.load(address, block, pc, level=level)
             # if victim_info:
             # memory.set_block(victim_info[0], victim_info[1])
 
@@ -174,7 +174,7 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
             set_num = (address >> cache._set_shift) & set_mask
             cc_set_miss_counter[set_num][level] += 1
-            cache.load(address, block, pc, WB_insertion=1)
+            cache.load(address, block, pc, level=level, WB_insertion=1)
             cache.write(address, byte, pc)
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses_cc
@@ -186,7 +186,7 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
             set_num = (address >> cache._set_shift) & set_mask
             dc_set_miss_counter[set_num] += 1
-            cache.load(address, block, pc, WB_insertion=1)
+            cache.load(address, block, pc, level=level, WB_insertion=1)
             cache.write(address, byte, pc)
             if instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
@@ -214,7 +214,7 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
 
             # Write block to cache
             # block = memory.get_block(address)
-            cache.load(address, block, pc, WB_insertion=1)
+            cache.load(address, block, pc, level=level, WB_insertion=1)
             cache.write(address, byte, pc)
 
     return 1
@@ -507,16 +507,9 @@ for k in range(len(simulations)):
                 simulations[k][3], simulations[k][4], simulations[k][5], type="data_cache")
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
-    LLC_ctr_0 = Cache(simulations[k][1] // 4, simulations[k][0], simulations[k][2],
-                      2 ** 2, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
-    LLC_ctr_1 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
-                      simulations[k][3], replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
-    LLC_ctr_2 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                      simulations[k][3], replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
-    LLC_ctr_3 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                      simulations[k][3], replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
-    LLC_ctr = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                    2 ** 2, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+    LLC_ctr = Cache(simulations[k][1] // 4, simulations[k][0], simulations[k][2],
+                    2 ** 2, replace_pol="modified_LRU", write_pol=simulations[k][5], type="ctr_cache")
+
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
     # l1_cache_cc = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",type="level1_cc")
