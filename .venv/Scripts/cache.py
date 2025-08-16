@@ -33,14 +33,15 @@ class Cache:
         self._block_size = block_size  # Block size
         self._type = type
         # Bit offset of cache line tag
-        self._tag_shift = int(log(self._size // self._mapping_pol, 2))
+        self._tag_shift = int(log(self._size // (self._mapping_pol * self._block_size), 2)) + int(
+            log(self._block_size, 2))
         # Bit offset of cache line set
         self._set_shift = int(log(self._block_size, 2))
         if self._replace_pol == Cache.ship_plus:
             self._shct = self.SHCT()
-            # Track ~64 sampled sets (1-2% of total sets)
             total_sets = size // (block_size * mapping_pol)
-            self.sampled_sets = set(random.sample(range(total_sets), 16))
+            spacing = total_sets // 16
+            self.sampled_sets = {i for i in range(0, total_sets, spacing)}
 
     class SHCT:
         """
@@ -233,7 +234,11 @@ class Cache:
 
         # Store victim info if modified
         if victim.modified:
-            victim_info = (index, victim.data)
+            n = self._set_shift  # number of bits
+            mask = (1 << n) - 1
+            victim_address = victim.tag << (self._tag_shift) | (
+                        ((address >> self._set_shift) & mask) << self._set_shift)
+            victim_info = (victim_address)
 
         # Replace victim
         victim.modified = 0

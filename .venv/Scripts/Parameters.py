@@ -22,7 +22,7 @@ simulations = {}
 # Memory_size, Cache_size, Block_size, mapping, replace_policy, write_policy
 # simulations[0] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 0, "LRU", "WB"]
 # simulations[1] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 1, "LRU", "WB"]
-simulations[0] = [mem_size, cache_size, block_size, 2 ** 3, "ship_plus", "WB", ctr_cache_size, "ship_plus"]
+simulations[0] = [mem_size, cache_size, block_size, 2 ** 2, "ship_plus", "WB", ctr_cache_size, "ship_plus"]
 # simulations[3] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 3, "LRU", "WB"]
 # simulations[4] = [mem_size, 2 ** 13, 2 ** 6, 2 ** 4, "LRU", "WB"]
 
