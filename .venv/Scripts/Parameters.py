@@ -12,7 +12,7 @@ block_size = 2 ** BLOCK
 mapping = 2 ** MAPPING
 replace_policy = "LRU"
 write_policy = "WB"
-replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus", "modified_LRU"]
+replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus", "modified_LRU", "pseudo_LRU", "RL"]
 write_policies = ["WB", "WT"]
 ctr_cache_size = 2 ** COUNTERS_CACHE
 
@@ -54,10 +54,18 @@ execution_time = 0
 cache_hit = False
 smart_set_indexing = False
 WARMUP_INSTRUCTIONS = 1000000
+global instructions_number
+instructions_number = 0
 level0_cc_trace = []
 level1_cc_trace = []
 level2_cc_trace = []
 level3_cc_trace = []
+lazy_updated = False
+###Randomness calculator variables###
+previous_address = 0
+randomness_num_entries = 65536
+randomness = 0
+RANDOMNESS_MAX_VALUE = 128
 ################
 # Parameters
 TREE_ARITY = 8

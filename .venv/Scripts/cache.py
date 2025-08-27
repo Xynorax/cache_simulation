@@ -1,9 +1,13 @@
 import random
 from math import log
 
+import Parameters
+import reward_tracker
+import tensorflow as tf
 import util
+from NN_replacement import NNReplacementPolicy, build_state
 from Parameters import TREE_LEVELS
-from Parameters import smart_set_indexing
+from Parameters import smart_set_indexing, randomness, randomness_num_entries
 from line import Line
 
 
@@ -25,7 +29,14 @@ class Cache:
     def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol,
                  write_pol, type="data_cache"):
         self._lines = [Line(block_size) for i in range(size // block_size)]
-
+        self.num_sets = (size // block_size) // mapping_pol
+        self.sets = [
+            [Line(block_size) for _ in range(mapping_pol)]
+            for _ in range(self.num_sets)
+        ]
+        self.plru_bits = [
+            [0] * (mapping_pol - 1) for _ in range(self.num_sets)
+        ]
         self._mapping_pol = mapping_pol  # Mapping policy
         self._replace_pol = replace_pol  # Replacement policy
         self._write_pol = write_pol  # Write policy
@@ -35,7 +46,8 @@ class Cache:
         self._block_size = block_size  # Block size
         self._type = type
         # Bit offset of cache line tag
-        self._tag_shift = int(log(self._size // self._mapping_pol, 2))
+        self._tag_shift = int(log(self._size // (self._mapping_pol * self._block_size), 2)) + int(
+            log(self._block_size, 2))
         # Bit offset of cache line set
         self._set_shift = int(log(self._block_size, 2))
         if self._replace_pol == Cache.ship_plus:
@@ -43,6 +55,9 @@ class Cache:
             total_sets = size // (block_size * mapping_pol)
             spacing = total_sets // 16
             self.sampled_sets = {i for i in range(0, total_sets, spacing)}
+        if self._replace_pol == "RL":
+            self.tracker = self.RewardTracker()
+            self.nn_policy = NNReplacementPolicy()
 
     class SHCT:
         """
@@ -116,7 +131,50 @@ class Cache:
             index = signature % self.num_entries
             return self.counters[index]
 
-    def read(self, address, pc):
+    class RewardTracker:
+        def __init__(self):
+            self.pending_events = []
+            self.timeout = 100000
+
+        global instructions_number
+
+        def add_event(self, evicted, inserted, state, action, next_state, way0, way1, way2):
+            event = {
+                "evicted": evicted,
+                "inserted": inserted,
+                "state": state,
+                "action": action,
+                "next_state": next_state,
+                "age": Parameters.instructions_number,
+                "way0": way0,
+                "way1": way1,
+                "way2": way2
+            }
+            self.pending_events.append(event)
+
+        def resolve(self, access_addr, nn_policy, no_reuse=False):
+            # Case 1: evicted line accessed again -> bad decision
+            for event in self.pending_events:
+                if access_addr == event["way0"]:
+                    event["way0"] = None
+                elif access_addr == event["way1"]:
+                    event["way1"] = None
+                elif access_addr == event["way2"]:
+                    event["way2"] = None
+                elif access_addr == event["inserted"]:
+                    event["inserted"] = None
+
+                if access_addr == event["evicted"]:
+                    nn_policy.store(event["state"], event["action"], -1, event["next_state"])
+                    self.pending_events.remove(event)
+                elif event["way0"] == None and event["way1"] == None and event["way2"] == None and event[
+                    "inserted"] == None:
+                    nn_policy.store(event["state"], event["action"], +1, event["next_state"])
+                    self.pending_events.remove(event)
+                if Parameters.instructions_number - event["age"] > self.timeout:
+                    self.pending_events.remove(event)
+
+    def read(self, address, pc, level):
         """Read a block of memory from the cache.
 
         :param int address: memory address for data to read from cache
@@ -125,32 +183,54 @@ class Cache:
         tag = self._get_tag(address)  # Tag of cache line
         set = self._get_set(address)  # Set of cache lines
         line = None
-
+        way_index = -1
         # Search for cache line within set
         for candidate in set:
+            way_index += 1
             if candidate.tag == tag and candidate.valid:
                 line = candidate
                 break
-
+        if self._replace_pol == "RL":
+            global instructions_number
+            positive_rewards, negative_rewards = reward_tracker.resolve(address, Parameters.instructions_number)
+            for i in range(len(negative_rewards)):
+                self.nn_policy.store(negative_rewards[i].state, negative_rewards[i].action, -1,
+                                     negative_rewards[i].next_state)
+            for i in range(len(positive_rewards)):
+                self.nn_policy.store(positive_rewards[i].state, positive_rewards[i].action, +1,
+                                     positive_rewards[i].next_state)
         # Update use bits of cache line
         if line:
             if (self._replace_pol == Cache.LRU or
                     self._replace_pol == Cache.LFU or self._replace_pol == Cache.modified_LRU):
-                self._update_use(line, set)
-            if (self._replace_pol == Cache.RLR):
+                self._update_use(line, set, level)
+            elif (self._replace_pol == Cache.RLR):
                 self._update_rlr(line, set)
-
-            if (self._replace_pol == Cache.ship_plus):
+            elif (self._replace_pol == "pseudo_LRU"):
+                set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+                set_num = (address >> self._set_shift) & set_mask
+                self._plru_update(set_num, way_index)
+            elif (self._replace_pol == Cache.ship_plus):
                 set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
                 if set_idx in self.sampled_sets:
                     if line.r == 0:
                         self._shct.increment_counter(line.signature)
                         line.r = 1
                 line.rrpv = 0
+            elif self._replace_pol == "RL":
+                if line.hits < 100000:
+                    line.hits += 1
+                line.preuse_distance = line.age_counter
+                for index in range(len(set)):
+                    if set[index].age_counter < 100000:
+                        set[index].age_counter += 1
+                line.age_counter = 0
+
+
 
         return line.data if line else line
 
-    def load(self, address, data, pc, level, WB_insertion=0):
+    def load(self, address, data, pc, level, WB_insertion=0, lazy_update=0):
         """Load a block of memory into the cache.
 
         :param int address: memory address for data to load to cache
@@ -171,12 +251,25 @@ class Cache:
             if self._replace_pol == Cache.FIFO:
                 self._update_use(victim, set)
         elif self._replace_pol == Cache.modified_LRU:
+            signature = ((pc << 1) + 1) & 0xFFFF  # 14-bit mask
+            index = signature % randomness_num_entries
+            randomness[index]
             victim = set[0]
             victim = self._find_victim(set)
-            victim.use = 0
+            victim.use = min(line.use for line in set) - 1
             for line in set:
-                if line.level < level and victim.use < line.use:
-                    victim.use = line.use + 1
+                if randomness[index] > 40:
+                    if line.level > level and victim.use < line.use:
+                        victim.use = line.use + 1
+                elif randomness[index] <= 40 and randomness[index] >= 19:
+                    if (line.level != 4 or line.level != 5) and victim.use < line.use:
+                        victim.use = line.use + 1
+                elif randomness[index] > 9 and randomness[index] <= 18:
+                    if line.level != 6 and victim.use < line.use:
+                        victim.use = line.use + 1
+                elif randomness[index] < 10:
+                    if line.level < level and victim.use < line.use:
+                        victim.use = line.use + 1
 
 
         elif self._replace_pol == Cache.RAND:
@@ -222,6 +315,12 @@ class Cache:
 
 
 
+        elif self._replace_pol == "pseudo_LRU":
+            victim = set[0]
+            set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+            set_num = (address >> self._set_shift) & set_mask
+            way = self._plru_get_victim(set_num)
+            victim = set[way]
 
         elif self._replace_pol == Cache.RLR:
             victim = set[0]
@@ -237,9 +336,94 @@ class Cache:
             victim.age_counter = 0
             victim.preuse_distance = 0
 
+        elif self._replace_pol == "RL":
+            victim = None
+            for index in range(len(set)):  # Check if a line in the set is free
+                if set[index].valid == 0:
+                    victim = set[index]
+                    victim.modified = 0
+                    victim.valid = 1
+                    victim.tag = tag
+                    victim.data = data
+                    victim.level = level
+                    victim.hits = 0
+                    victim.lazy_updated = lazy_update
+                    victim.use = 0
+                    victim.age_counter = 0
+                    victim.preuse_distance = 0
+                    return
+            ways_levels = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_levels[i] = set[i].level
+            ways_hits = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_hits[i] = set[i].hits
+            ways_preuse = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_preuse[i] = set[i].preuse_distance
+            ways_dirty = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_dirty[i] = set[i].modified
+            ways_lazy_updated = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_lazy_updated[i] = set[i].lazy_updated
+
+            state = build_state(ways_hits, address, pc, lazy_update, level, ways_levels,
+                                ways_preuse, ways_dirty, ways_lazy_updated)
+
+            victim_idx = self.nn_policy.choose_victim(state)
+            # Insert incoming
+            n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
+            mask = (1 << n) - 1
+            victim = set[victim_idx]
+            evicted_line_addr = victim.tag << (self._tag_shift) | (
+                    ((address >> self._set_shift) & mask) << self._set_shift)
+            victim.modified = 0
+            victim.valid = 1
+            victim.tag = tag
+            victim.data = data
+            victim.level = level
+            victim.hits = 0
+            victim.lazy_updated = lazy_update
+            victim.use = 0
+            victim.age_counter = 0
+            victim.preuse_distance = 0
+            ways_levels = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_levels[i] = set[i].level
+            ways_hits = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_hits[i] = set[i].hits
+            ways_preuse = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_preuse[i] = set[i].preuse_distance
+            ways_dirty = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_dirty[i] = set[i].modified
+            ways_lazy_updated = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_lazy_updated[i] = set[i].lazy_updated
+            next_state = build_state(ways_hits, address, pc, lazy_update, level, ways_levels,
+                                     ways_preuse, ways_dirty, ways_lazy_updated)
+            way = [0] * (self._mapping_pol - 1)
+            x = 0
+            set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+            set_num = (address >> self._set_shift) & set_mask
+            for i in range(self._mapping_pol):
+                if victim_idx != i:
+                    way[x] = (set[i].tag << self._tag_shift) + (set_num << self._set_shift)
+                    x += 1
+            # self.tracker.add_event(evicted_line_addr, address, state, victim_idx, next_state,way[0], way[1], way[2])
+
+            reward_tracker.add_event(evicted_line_addr, address, state, victim_idx, next_state, way[0], way[1], way[2],
+                                     way[3], way[4], way[5], way[6], Parameters.instructions_number)
         # Store victim info if modified
         if victim.modified:
-            victim_info = (victim.data)
+            n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
+            mask = (1 << n) - 1
+            victim_address = victim.tag << (self._tag_shift) | (
+                    ((address >> self._set_shift) & mask) << self._set_shift)
+            victim_info = (victim_address)
 
         # Replace victim
         victim.modified = 0
@@ -249,7 +433,7 @@ class Cache:
 
         return victim_info
 
-    def write(self, address, byte, pc):
+    def write(self, address, byte, pc, level):
         """Write a byte to cache.
 
         :param int address: memory address for data to write to cache
@@ -259,9 +443,10 @@ class Cache:
         tag = self._get_tag(address)  # Tag of cache line
         set = self._get_set(address)  # Set of cache lines
         line = None
-
+        way_index = -1
         # Search for cache line within set
         for candidate in set:
+            way_index += 1
             if candidate.tag == tag and candidate.valid:
                 line = candidate
                 break
@@ -274,9 +459,23 @@ class Cache:
             if (self._replace_pol == Cache.LRU or
                     self._replace_pol == Cache.LFU or
                     self._replace_pol == Cache.modified_LRU):
-                self._update_use(line, set)
-            if (self._replace_pol == Cache.RLR):
+                self._update_use(line, set, level)
+            elif (self._replace_pol == Cache.RLR):
                 self._update_rlr(line, set)
+            elif (self._replace_pol == "pseudo_LRU"):
+                set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+                set_num = (address >> self._set_shift) & set_mask
+                self._plru_update(set_num, way_index)
+            elif self._replace_pol == "RL":
+                if line.hits < 127:
+                    line.hits += 1
+                line.preuse_distance = line.age_counter
+                for index in range(len(set)):
+                    if set[index].age_counter < 127:
+                        set[index].age_counter += 1
+                line.age_counter = 0
+
+
         return True if line else False
 
     def print_section(self, start, amount):
@@ -382,9 +581,11 @@ class Cache:
             if set_num > set_mask:
                 raise ValueError("Set number = -1")
         index = set_num * self._mapping_pol
+        if set_num == 73:
+            print("Send Help")
         return self._lines[index:index + self._mapping_pol]
 
-    def _update_use(self, line, set):
+    def _update_use(self, line, set, level):
         """Update the use bits of a cache line.
 
         :param line line: cache line to update use bits of
@@ -392,6 +593,7 @@ class Cache:
         if self._replace_pol == Cache.LRU or self._replace_pol == Cache.modified_LRU:
             # Set the current line as MRU (highest use value)
             line.use = max(line.use for line in set) + 1
+            line.level = level
         elif self._replace_pol == Cache.FIFO:
             # No update on hits (FIFO only cares about insertion order)
             pass
@@ -411,9 +613,64 @@ class Cache:
                     victim = set[index]
             return victim
 
+    def _plru_get_victim(self, set_index):
+        """Choose a victim way from the PLRU tree for a given set."""
+        bits = self.plru_bits[set_index]
+        way = 0
+        idx = 0
+        while idx < len(bits):
+            direction = bits[idx]
+            if direction == 0:  # left subtree is LRU
+                idx = 2 * idx + 1
+            else:  # right subtree is LRU
+                idx = 2 * idx + 2
+            way = idx - (len(bits))  # translate tree index → way
+        return way
+
     def _update_rlr(self, line, set):
         line.preuse_distance = line.age_counter
         for index in range(len(set)):
             set[index].age_counter += 1
         line.age_counter = 0
         line.hit = 1
+
+    def _plru_update(self, set_index, way_index):
+        """Update PLRU bits after accessing a way."""
+        bits = self.plru_bits[set_index]  # length = ways - 1
+        node = way_index + len(bits)  # leaf index for this way
+        while node > 0:
+            parent = (node - 1) // 2
+            if node == 2 * parent + 1:  # accessed LEFT child
+                bits[parent] = 1  # mark RIGHT subtree as LRU
+            else:  # accessed RIGHT child
+                bits[parent] = 0  # mark LEFT subtree as LRU
+            node = parent
+
+    def get_weights(self):
+        weights, biases = self.nn_policy.net.layers[0].get_weights()
+        weights1, biases1 = self.nn_policy.net.layers[1].get_weights()
+        # print("weights:", weights)  # (state_dim, hidden_dim)
+        print("bias:", biases)
+        for x in weights:
+            print(x)
+        print("bias:", biases1)
+        print(weights1)
+
+    def save_weights(self):
+        self.nn_policy.save()
+
+    def weight_contributions(self):
+        x_sample = [0.0, 5e-05, 0.00011, 2e-05, 2e-05, 0.0, 0.0, 0.0, 0.5, 1.0, 0.0004893346922472119, 0, 0, 0, 0, 0, 0,
+                    0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+                    0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0.0, 2e-05, 0.0, 2e-05,
+                    2e-05, 0.0, 0.0, 0.0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0078125]
+        # x_sample: your input as a 1D array
+        x_input = tf.convert_to_tensor([x_sample], dtype=tf.float32)  # shape (1, input_dim)
+
+        with tf.GradientTape() as tape:
+            tape.watch(x_input)
+            y_pred = self.nn_policy.net(x_input)  # forward pass
+
+        # Compute gradients of output w.r.t. input
+        grads = tape.gradient(y_pred, x_input)
+        print(grads.numpy())
