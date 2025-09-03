@@ -1,4 +1,3 @@
-import Parameters
 import util
 from NN_replacement import *
 from Parameters import *
@@ -126,8 +125,8 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
         block = bytearray(8)
         if cache._type == "level1":
             victim_address = cache.load(address, block, pc, level=level)
-            # if victim_address != None:
-            # lazy_update(victim_address, pc)
+            if victim_address != None:
+                lazy_update(victim_address, pc)
             set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
             set_num = (address >> cache._set_shift) & set_mask
             dc_set_miss_counter[set_num] += 1
@@ -196,8 +195,8 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 global LLC_ctr_level_misses
                 LLC_ctr_level_misses[level] += 1
 
-        # if victim_address != None:
-        #lazy_update(victim_address, pc)
+        if victim_address != None:
+            lazy_update(victim_address, pc)
 
         # execution_time = execution_time + DRAM_ACCESS_TIME  # Add execution time for a cache miss
         # Write victim line's block to memory if replaced
@@ -269,8 +268,8 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             if write_policy == Cache.WRITE_BACK:
                 victim_address = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc)
-                # if victim_address != None:
-                # lazy_update(victim_address, pc)
+                if victim_address != None:
+                    lazy_update(victim_address, pc)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses_cc
                 l1_misses_cc += 1
@@ -284,8 +283,8 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             if write_policy == Cache.WRITE_BACK:
                 victim_address = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc)
-                # if victim_address != None:
-                # lazy_update(victim_address, pc)
+                if victim_address != None:
+                    lazy_update(victim_address, pc)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
                 l1_misses += 1
@@ -312,13 +311,13 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             if cache._type == "data_cache":
                 victim_address = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc)
-                # if victim_address != None:
-                # lazy_update(victim_address, pc)
+                if victim_address != None:
+                    lazy_update(victim_address, pc)
             elif cache._type == "ctr_cache":
                 victim_address = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc, level)
-                # if victim_address != None:
-                #lazy_update(victim_address, pc)
+                if victim_address != None:
+                    lazy_update(victim_address, pc)
 
     return 1
 command = None
@@ -423,9 +422,9 @@ class MemoryAccess:
         elif access_type == "write":
             initiate_command(f"read {address}", False, self._pc)
             initiate_command(f"write {address} {self.byte}", False, self._pc)
-            # if (cache_hit):
-            #    cache_hit = False
-            #    return
+            if (cache_hit):
+                cache_hit = False
+                return
         cache_hit = False
         root_index = int((address - MEMORY_START_ADDR) // IND_TREE_SIZE)
         tree_offset = int(root_index * IND_TREE_SIZE)
@@ -449,9 +448,9 @@ class MemoryAccess:
                 initiate_command(f"read {self.counter_addresses[i]}", True, self._pc, i)
                 level_access_counter[i] += 2
                 initiate_command(f"write {self.counter_addresses[i]} {self.byte}", True, self._pc, i)
-                # if (cache_hit):
-                #    cache_hit = False
-                #    break
+                if (cache_hit):
+                    cache_hit = False
+                    break
 
     def compute_counter_addresses(self, cpu_address, current_level, root_index, tree_offset, dataNodeNum):
 
@@ -630,7 +629,7 @@ for k in range(len(simulations)):
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
     LLC_ctr = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                    2 ** 2, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                    2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
