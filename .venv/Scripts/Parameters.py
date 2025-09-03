@@ -12,7 +12,7 @@ block_size = 2 ** BLOCK
 mapping = 2 ** MAPPING
 replace_policy = "LRU"
 write_policy = "WB"
-replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus"]
+replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus", "modified_LRU", "pseudo_LRU", "RL"]
 write_policies = ["WB", "WT"]
 ctr_cache_size = 2 ** COUNTERS_CACHE
 
@@ -35,14 +35,14 @@ simulations[0] = [mem_size, cache_size, block_size, 2 ** 2, "ship_plus", "WB", c
 
 
 # Initializations
+Episodes = 50
 Execution_Times = [0] * No_of_simulations  # Initialize an array with values for all simulations
 cache_hits_end = [0] * No_of_simulations
 cache_misses_end = [0] * No_of_simulations
 hit_percent = [0] * No_of_simulations
 hits = 0
 misses = 0
-ctr_cache_hits = 0
-ctr_cache_misses = 0
+
 l1_hits = 0
 l1_misses = 0
 l1_hits_cc = 0
@@ -58,6 +58,10 @@ level0_cc_trace = []
 level1_cc_trace = []
 level2_cc_trace = []
 level3_cc_trace = []
+instructions_number = 0
+randomness = 0
+RANDOMNESS_MAX_VALUE = 128
+previous_address = 0
 ################
 # Parameters
 TREE_ARITY = 8
@@ -88,5 +92,3 @@ level_misses_l1 = [0] * TREE_LEVELS
 level_hits = [0] * TREE_LEVELS
 level_misses = [0] * TREE_LEVELS
 level_access_counter = [0] * TREE_LEVELS
-LLC_ctr_level_hits = [0] * TREE_LEVELS
-LLC_ctr_level_misses = [0] * TREE_LEVELS
