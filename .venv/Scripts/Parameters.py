@@ -61,6 +61,8 @@ level1_cc_trace = []
 level2_cc_trace = []
 level3_cc_trace = []
 lazy_updated = False
+lazy_update_active = True
+total_evictions = 0
 ###Randomness calculator variables###
 previous_address = 0
 randomness_num_entries = 65536

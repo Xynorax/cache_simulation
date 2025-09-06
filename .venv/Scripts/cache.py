@@ -262,7 +262,8 @@ class Cache:
                     if line.level > level and victim.use < line.use:
                         victim.use = line.use + 1
                 elif randomness[index] <= 40 and randomness[index] >= 19:
-                    if (line.level != 4 or line.level != 5) and victim.use < line.use:
+                    if (line.level !=
+                        4 or line.level != 5) and victim.use < line.use:
                         victim.use = line.use + 1
                 elif randomness[index] > 9 and randomness[index] <= 18:
                     if line.level != 6 and victim.use < line.use:
@@ -282,6 +283,8 @@ class Cache:
                 if set[index].valid == 0:
                     victim = set[index]
                     break
+            if self._type == "ctr_cache":
+                Parameters.total_evictions += 1
             if victim == None:
                 while victim == None:
                     for index in range(len(set)):  # Check which line has RRPV = 3
@@ -607,6 +610,8 @@ class Cache:
                 victim = set[index]
                 return victim
         if victim is None:
+            if self._type == "ctr_cache":
+                Parameters.total_evictions += 1
             victim = set[0]
             for index in range(len(set)):
                 if set[index].use < victim.use:
@@ -674,3 +679,13 @@ class Cache:
         # Compute gradients of output w.r.t. input
         grads = tape.gradient(y_pred, x_input)
         print(grads.numpy())
+
+    def invalidate_line(self, address):
+        tag = self._get_tag(address)  # Tag of cache line
+        set = self._get_set(address)  # Set of cache lines
+        line = None
+        # Search for cache line within set
+        for candidate in set:
+            if candidate.tag == tag and candidate.valid:
+                candidate.valild = 0
+                break
