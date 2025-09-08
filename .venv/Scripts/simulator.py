@@ -117,10 +117,9 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
     else:
         block = bytearray(8)
         if cache._type == "level1":
-            victim_address = cache.load(address, block, pc, level=level)
-            if victim_address != None:
-                print(f"Evicted address: {victim_address}")
-                write(victim_address, block, memory, LLC, pc, level)
+            victim_address, l1_victim_address = cache.load(address, block, pc, level=level)
+            if l1_victim_address != None:
+                write(l1_victim_address, block, memory, LLC, pc, level, from_l1=True)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
                 l1_misses += 1
@@ -193,7 +192,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
     return 1
 
 
-def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
+def write(address, byte, memory, cache, pc, level=TREE_LEVELS, from_l1=False):
     """Write a byte to cache."""
     written = cache.write(address, byte, pc, level=level)
     global execution_time
@@ -207,7 +206,7 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
 
     if written:
         if cache._type == "data_cache":
-            if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
+            if Parameters.instructions_number > WARMUP_INSTRUCTIONS and not from_l1:
                 global hits
                 hits += 1
         elif cache._type == "level1_cc":
@@ -235,7 +234,7 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
     else:
         block = bytearray(8)
         if cache._type == "data_cache":
-            if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
+            if Parameters.instructions_number > WARMUP_INSTRUCTIONS and not from_l1:
                 global misses
                 misses += 1
                 if level < TREE_LEVELS:
@@ -254,10 +253,10 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS):
             return 0
         elif cache._type == "level1":
             if write_policy == Cache.WRITE_BACK:
-                victim_address = cache.load(address, block, pc, level=level, WB_insertion=1)
+                victim_address, l1_victim_address = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc, level)
-                if victim_address != None:
-                    lazy_update(victim_address, pc)
+                if l1_victim_address != None:
+                    write(l1_victim_address, block, memory, LLC, pc, level, from_l1=True)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
                 l1_misses += 1
@@ -481,9 +480,12 @@ def benchmark_manual():  ##Benchmark 2 - Manually inputed values
     # MemoryAccess("write", 1835008)
     # MemoryAccess("write", 2883584)
     # MemoryAccess("write", 3932160)
-    # MemoryAccess("read", 0)
-    #MemoryAccess("read", 2097152)
     MemoryAccess("read", 0)
+    MemoryAccess("read", 8)
+    MemoryAccess("read", 64)
+
+    #MemoryAccess("read", 2097152)
+    MemoryAccess("read", 40000)
     initiate_command("stats")
     # initiate_command("printmem 0 20")
     # initiate_command("printcache 0 20")

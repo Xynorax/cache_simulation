@@ -6,7 +6,6 @@ import reward_tracker
 import tensorflow as tf
 import util
 from NN_replacement import NNReplacementPolicy, build_state
-from Parameters import TREE_LEVELS
 from Parameters import smart_set_indexing, randomness, randomness_num_entries
 from line import Line
 
@@ -247,7 +246,7 @@ class Cache:
                 self._replace_pol == Cache.FIFO):
             victim = set[0]
             victim = self._find_victim(set)
-            victim.use = 0
+            victim.use = max(line.use for line in set) + 1
             if self._replace_pol == Cache.FIFO:
                 self._update_use(victim, set)
         elif self._replace_pol == Cache.modified_LRU:
@@ -303,12 +302,7 @@ class Cache:
             elif self._shct.get_counter(incoming_signature) == self._shct.max_counter:
                 victim.rrpv = 0
             else:
-                if level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2:
-                    victim.rrpv = 0
-                elif level == TREE_LEVELS - 3:
-                    victim.rrpv = 1
-                else:
-                    victim.rrpv = 2
+                victim.rrpv = 2
             set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
             if victim.r == 0 and victim.valid and set_idx in self.sampled_sets:
                 self._shct.decrement_counter(victim.signature)
@@ -421,20 +415,24 @@ class Cache:
             reward_tracker.add_event(evicted_line_addr, address, state, victim_idx, next_state, way[0], way[1], way[2],
                                      way[3], way[4], way[5], way[6], Parameters.instructions_number)
         # Store victim info if modified
+        n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
+        mask = (1 << n) - 1
+        victim_address = victim.tag << (self._tag_shift) | (
+                ((address >> self._set_shift) & mask) << self._set_shift)
+        l1_victim = None
         if victim.modified:
-            n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
-            mask = (1 << n) - 1
-            victim_address = victim.tag << (self._tag_shift) | (
-                    ((address >> self._set_shift) & mask) << self._set_shift)
             victim_info = (victim_address)
+        if victim.valid:
+            l1_victim = (victim_address)
 
         # Replace victim
         victim.modified = 0
         victim.valid = 1
         victim.tag = tag
         victim.data = data
+        victim.level = level
 
-        return victim_info
+        return victim_info, l1_victim
 
     def write(self, address, byte, pc, level):
         """Write a byte to cache.
@@ -584,8 +582,8 @@ class Cache:
             if set_num > set_mask:
                 raise ValueError("Set number = -1")
         index = set_num * self._mapping_pol
-        if set_num == 73:
-            print("Send Help")
+        if self._type == "ctr_cache":
+            print(f"Set Number = {set_num}")
         return self._lines[index:index + self._mapping_pol]
 
     def _update_use(self, line, set, level):

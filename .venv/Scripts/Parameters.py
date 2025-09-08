@@ -61,7 +61,7 @@ level1_cc_trace = []
 level2_cc_trace = []
 level3_cc_trace = []
 lazy_updated = False
-lazy_update_active = True
+lazy_update_active = False
 total_evictions = 0
 ###Randomness calculator variables###
 previous_address = 0
@@ -71,7 +71,7 @@ RANDOMNESS_MAX_VALUE = 128
 ################
 # Parameters
 TREE_ARITY = 8
-TREE_ROOTS = 64
+TREE_ROOTS = 64  # Normally 64 leads to 7 levels
 TREE_ARITY_BITS = (TREE_ARITY - 1).bit_length()
 
 MEMORY_START_ADDR = 0
