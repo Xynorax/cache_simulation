@@ -85,6 +85,17 @@ def lazy_update(node_address, pc):
             lazy_update(victim_address, pc)
 
 
+def promotion(address, cache, pc, level=TREE_LEVELS, modified=False):
+    block = bytearray(8)
+    cache_block = cache.read(address, pc, level=level)
+    if cache_block and not modified:
+        return
+    victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
+    if modified:
+        cache.write(address, block, pc, level=level)
+    if victim_address != None:
+        lazy_update(victim_address, pc)
+
 def read(address, memory, cache, pc, level=TREE_LEVELS):
     """Read a byte from cache."""
     cache_block = cache.read(address, pc, level=level)
@@ -131,7 +142,10 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
         if cache._type == "level1":
             victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
             if non_modified_victim != None:
-                write(non_modified_victim, block, memory, LLC, pc, level, from_l1=True)
+                modified = False
+                if victim_address == non_modified_victim:
+                    modified = True
+                promotion(non_modified_victim, LLC, pc, level=level, modified=modified)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
                 l1_misses += 1
@@ -268,7 +282,10 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS, from_l1=False):
                 victim_address, non_modified_victim = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc, level)
                 if non_modified_victim != None:
-                    write(non_modified_victim, block, memory, LLC, pc, level, from_l1=True)
+                    modified = False
+                    if victim_address == non_modified_victim:
+                        modified = True
+                    promotion(non_modified_victim, LLC, pc, level=level, modified=True)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
                 l1_misses += 1
@@ -432,9 +449,10 @@ class MemoryAccess:
         elif access_type == "write":
             initiate_command(f"read {address}", False, self._pc)
             initiate_command(f"write {address} {self.byte}", False, self._pc)
-            if (cache_hit) and lazy_update_active == True:
+            if (cache_hit):
                 cache_hit = False
-                return
+                if lazy_update_active:
+                    return
         cache_hit = False
         root_index = int((address - MEMORY_START_ADDR) // IND_TREE_SIZE)
         tree_offset = int(root_index * IND_TREE_SIZE)
@@ -458,9 +476,10 @@ class MemoryAccess:
                 initiate_command(f"read {self.counter_addresses[i]}", True, self._pc, i)
                 level_access_counter[i] += 2
                 initiate_command(f"write {self.counter_addresses[i]} {self.byte}", True, self._pc, i)
-                if (cache_hit) and lazy_update_active == True:
+                if (cache_hit):
                     cache_hit = False
-                    break
+                    if lazy_update_active:
+                        break
 
     def compute_counter_addresses(self, cpu_address, current_level, root_index, tree_offset, dataNodeNum):
 
@@ -589,8 +608,13 @@ def benchmark_trace(MAX_INSTRUCTIONS):
     # for i in range(0, MAX_INSTRUCTIONS, BATCH):
     # instr_batch = parse_champsim_trace_line_fast(TRACE_FILE_PATH, i, BATCH)
     for x in range(MAX_INSTRUCTIONS):
+        global ctr_cache_misses
+        print("Counter Cache Misses")
+        print(ctr_cache_misses)
         instr = instr_batch[x]
         Parameters.instructions_number += 1
+        if Parameters.instructions_number == 1100000:
+            print("Debug Point!")
         print(f"Instruction number:{Parameters.instructions_number}")
         program_counter = instr[0]
         if instr[9] == 0 and instr[10] == 0 and instr[11] == 0 and instr[12] == 0 and instr[13] == 0 and instr[14] == 0:
