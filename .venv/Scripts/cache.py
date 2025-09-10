@@ -420,7 +420,7 @@ class Cache:
         victim_address = victim.tag << (self._tag_shift) | (
                 ((address >> self._set_shift) & mask) << self._set_shift)
         l1_victim = None
-        if victim.modified:
+        if victim.modified and victim.valid:
             victim_info = (victim_address)
         if victim.valid:
             l1_victim = (victim_address)
@@ -685,5 +685,5 @@ class Cache:
         # Search for cache line within set
         for candidate in set:
             if candidate.tag == tag and candidate.valid:
-                candidate.valild = 0
+                candidate.valid = 0
                 break

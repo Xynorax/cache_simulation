@@ -54,7 +54,8 @@ def lazy_update(node_address, pc):
             LLC_ctr.write(parent_address, byte, pc, level=level)
             hit = True
         else:  #
-            victim_address = LLC_ctr.load(parent_address, data=bytearray(8), pc=pc, level=level, lazy_update=1)
+            victim_address, non_modified_victim = LLC_ctr.load(parent_address, data=bytearray(8), pc=pc, level=level,
+                                                               lazy_update=1)
             LLC_ctr.write(parent_address, byte, pc, level=level)
         if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
             if hit == True:
@@ -117,16 +118,16 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
     else:
         block = bytearray(8)
         if cache._type == "level1":
-            victim_address, l1_victim_address = cache.load(address, block, pc, level=level)
-            if l1_victim_address != None:
-                write(l1_victim_address, block, memory, LLC, pc, level, from_l1=True)
+            victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
+            if non_modified_victim != None:
+                write(non_modified_victim, block, memory, LLC, pc, level, from_l1=True)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
                 l1_misses += 1
             return 0
         # block = memory.get_block(address)
         elif cache._type == "level1_cc":
-            victim_address = cache.load(address, block, pc, level=level)
+            victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
             if victim_address != None:
                 LLC.write(victim_address, block, pc, level)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
@@ -136,7 +137,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 l1_misses_cc += 1
             return 0
         elif cache._type == "data_cache":
-            victim_address = cache.load(address, block, pc, level=level)
+            victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global misses
                 misses += 1
@@ -166,7 +167,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 load = True
 
             if load == True:
-                victim_address = cache.load(address, block, pc, level=level)
+                victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
 
             if victim_address != None:
                 set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
@@ -241,7 +242,7 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS, from_l1=False):
                     level_misses[level] += 1
         elif cache._type == "level1_cc":
             if write_policy == Cache.WRITE_BACK:
-                victim_address = cache.load(address, block, pc, level=level, WB_insertion=1)
+                victim_address, non_modified_victim = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc)
                 if victim_address != None:
                     lazy_update(victim_address, pc)
@@ -253,10 +254,10 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS, from_l1=False):
             return 0
         elif cache._type == "level1":
             if write_policy == Cache.WRITE_BACK:
-                victim_address, l1_victim_address = cache.load(address, block, pc, level=level, WB_insertion=1)
+                victim_address, non_modified_victim = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc, level)
-                if l1_victim_address != None:
-                    write(l1_victim_address, block, memory, LLC, pc, level, from_l1=True)
+                if non_modified_victim != None:
+                    write(non_modified_victim, block, memory, LLC, pc, level, from_l1=True)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
                 l1_misses += 1
@@ -285,13 +286,13 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS, from_l1=False):
     elif write_policy == Cache.WRITE_BACK:
         if not written:
             if cache._type == "data_cache":
-                victim_address = cache.load(address, block, pc, level=level, WB_insertion=1)
+                victim_address, non_modified_victim = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc, level)
 
                 if victim_address != None:
                     lazy_update(victim_address, pc)
             elif cache._type == "ctr_cache":
-                victim_address = cache.load(address, block, pc, level=level, WB_insertion=1)
+                victim_address, non_modified_victim = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc, level)
                 set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
                 set_num = (address >> cache._set_shift) & set_mask
