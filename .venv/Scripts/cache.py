@@ -420,9 +420,9 @@ class Cache:
         victim_address = victim.tag << (self._tag_shift) | (
                 ((address >> self._set_shift) & mask) << self._set_shift)
         l1_victim = None
-        if victim.modified:
+        if victim.modified and victim.valid:
             victim_info = (victim_address)
-        if victim.valid:
+        elif victim.valid:
             l1_victim = (victim_address)
 
         # Replace victim
@@ -582,8 +582,8 @@ class Cache:
             if set_num > set_mask:
                 raise ValueError("Set number = -1")
         index = set_num * self._mapping_pol
-        if self._type == "ctr_cache":
-            print(f"Set Number = {set_num}")
+        # if self._type == "ctr_cache":
+        # print(f"Set Number = {set_num}")
         return self._lines[index:index + self._mapping_pol]
 
     def _update_use(self, line, set, level):
@@ -685,5 +685,5 @@ class Cache:
         # Search for cache line within set
         for candidate in set:
             if candidate.tag == tag and candidate.valid:
-                candidate.valild = 0
+                candidate.valid = 0
                 break
