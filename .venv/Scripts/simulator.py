@@ -1,5 +1,6 @@
 import csv
 
+import Parameters
 import util
 from NN_replacementv2 import *
 from Parameters import *
@@ -703,6 +704,7 @@ for E in range(rl._episodes):
         cache_misses_end[k] = misses
         hit_percent[k] = hits / (hits + misses) if (hits + misses) != 0 else 0.0
         rl.store_transition([0] * rl._state_dim, 0, 0, [0] * rl._state_dim, True)
+
 
 # LLC_ctr.weight_contributions()
 # LLC_ctr.get_weights()
