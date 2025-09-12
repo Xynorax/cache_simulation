@@ -2,10 +2,9 @@ import random
 from math import log
 
 import Parameters
-import reward_tracker
 import tensorflow as tf
 import util
-from NN_replacement import NNReplacementPolicy, build_state
+from NN_replacementv2 import build_state, rl
 from Parameters import smart_set_indexing, randomness, randomness_num_entries
 from line import Line
 
@@ -54,9 +53,6 @@ class Cache:
             total_sets = size // (block_size * mapping_pol)
             spacing = total_sets // 16
             self.sampled_sets = {i for i in range(0, total_sets, spacing)}
-        if self._replace_pol == "RL":
-            self.tracker = self.RewardTracker()
-            self.nn_policy = NNReplacementPolicy()
 
     class SHCT:
         """
@@ -130,48 +126,7 @@ class Cache:
             index = signature % self.num_entries
             return self.counters[index]
 
-    class RewardTracker:
-        def __init__(self):
-            self.pending_events = []
-            self.timeout = 100000
 
-        global instructions_number
-
-        def add_event(self, evicted, inserted, state, action, next_state, way0, way1, way2):
-            event = {
-                "evicted": evicted,
-                "inserted": inserted,
-                "state": state,
-                "action": action,
-                "next_state": next_state,
-                "age": Parameters.instructions_number,
-                "way0": way0,
-                "way1": way1,
-                "way2": way2
-            }
-            self.pending_events.append(event)
-
-        def resolve(self, access_addr, nn_policy, no_reuse=False):
-            # Case 1: evicted line accessed again -> bad decision
-            for event in self.pending_events:
-                if access_addr == event["way0"]:
-                    event["way0"] = None
-                elif access_addr == event["way1"]:
-                    event["way1"] = None
-                elif access_addr == event["way2"]:
-                    event["way2"] = None
-                elif access_addr == event["inserted"]:
-                    event["inserted"] = None
-
-                if access_addr == event["evicted"]:
-                    nn_policy.store(event["state"], event["action"], -1, event["next_state"])
-                    self.pending_events.remove(event)
-                elif event["way0"] == None and event["way1"] == None and event["way2"] == None and event[
-                    "inserted"] == None:
-                    nn_policy.store(event["state"], event["action"], +1, event["next_state"])
-                    self.pending_events.remove(event)
-                if Parameters.instructions_number - event["age"] > self.timeout:
-                    self.pending_events.remove(event)
 
     def read(self, address, pc, level):
         """Read a block of memory from the cache.
@@ -189,15 +144,6 @@ class Cache:
             if candidate.tag == tag and candidate.valid:
                 line = candidate
                 break
-        if self._replace_pol == "RL":
-            global instructions_number
-            positive_rewards, negative_rewards = reward_tracker.resolve(address, Parameters.instructions_number)
-            for i in range(len(negative_rewards)):
-                self.nn_policy.store(negative_rewards[i].state, negative_rewards[i].action, -1,
-                                     negative_rewards[i].next_state)
-            for i in range(len(positive_rewards)):
-                self.nn_policy.store(positive_rewards[i].state, positive_rewards[i].action, +1,
-                                     positive_rewards[i].next_state)
         # Update use bits of cache line
         if line:
             if (self._replace_pol == Cache.LRU or
@@ -217,11 +163,12 @@ class Cache:
                         line.r = 1
                 line.rrpv = 0
             elif self._replace_pol == "RL":
-                if line.hits < 100000:
+                rl.resolve(address)
+                if line.hits < 1000:
                     line.hits += 1
                 line.preuse_distance = line.age_counter
                 for index in range(len(set)):
-                    if set[index].age_counter < 100000:
+                    if set[index].age_counter < 3000:
                         set[index].age_counter += 1
                 line.age_counter = 0
 
@@ -348,7 +295,7 @@ class Cache:
                     victim.use = 0
                     victim.age_counter = 0
                     victim.preuse_distance = 0
-                    return
+                    return None, None
             ways_levels = [0] * self._mapping_pol
             for i in range(len(set)):
                 ways_levels[i] = set[i].level
@@ -368,13 +315,20 @@ class Cache:
             state = build_state(ways_hits, address, pc, lazy_update, level, ways_levels,
                                 ways_preuse, ways_dirty, ways_lazy_updated)
 
-            victim_idx = self.nn_policy.choose_victim(state)
+            victim_idx = rl.choose_action(state)
             # Insert incoming
             n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
             mask = (1 << n) - 1
             victim = set[victim_idx]
             evicted_line_addr = victim.tag << (self._tag_shift) | (
                     ((address >> self._set_shift) & mask) << self._set_shift)
+            victim_info = None
+            l1_victim = None
+            if victim.modified and victim.valid:
+                victim_info = (evicted_line_addr)
+            elif victim.valid:
+                l1_victim = (evicted_line_addr)
+
             victim.modified = 0
             victim.valid = 1
             victim.tag = tag
@@ -410,10 +364,9 @@ class Cache:
                 if victim_idx != i:
                     way[x] = (set[i].tag << self._tag_shift) + (set_num << self._set_shift)
                     x += 1
-            # self.tracker.add_event(evicted_line_addr, address, state, victim_idx, next_state,way[0], way[1], way[2])
+            rl.add_event(evicted_line_addr, address, state, victim_idx, next_state, way[0], way[1], way[2])
+            return victim_info, l1_victim
 
-            reward_tracker.add_event(evicted_line_addr, address, state, victim_idx, next_state, way[0], way[1], way[2],
-                                     way[3], way[4], way[5], way[6], Parameters.instructions_number)
         # Store victim info if modified
         n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
         mask = (1 << n) - 1

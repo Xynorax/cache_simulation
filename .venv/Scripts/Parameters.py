@@ -1,5 +1,4 @@
 import math
-
 MEMORY = 34  # MEMORY - size of main memory in 2^N bytes
 CACHE = 20  # CACHE - size of the cache in 2^N bytes
 BLOCK = 6  # BLOCK - size of a block of memory in 2^N bytes

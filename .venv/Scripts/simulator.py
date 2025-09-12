@@ -1,7 +1,8 @@
 import csv
 
+import Parameters
 import util
-from NN_replacement import *
+from NN_replacementv2 import *
 from Parameters import *
 from cache import Cache
 from translation import *
@@ -633,73 +634,76 @@ def benchmark_trace(MAX_INSTRUCTIONS):
                     src_addr = mm.translate_virtual_to_physical(src_addr)
                     MemoryAccess("read", src_addr, pc=program_counter)
 
-for k in range(len(simulations)):
 
-    l1_cache_size = (2 ** 15) // 2
-    global cc_set_access_counter
-    global dc_set_access_counter
-    levels_array = TREE_LEVELS * [0]
-    cc_set_access_counter = [[0 for _ in range(TREE_LEVELS)] for _ in range((l1_cache_size // block_size) // 4)]
-    dc_set_access_counter = ((l1_cache_size // block_size) // 4) * [0]
+for E in range(rl._episodes):
+    for k in range(len(simulations)):
+        l1_cache_size = (2 ** 15) // 2
+        global cc_set_access_counter
+        global dc_set_access_counter
+        levels_array = TREE_LEVELS * [0]
+        cc_set_access_counter = [[0 for _ in range(TREE_LEVELS)] for _ in range((l1_cache_size // block_size) // 4)]
+        dc_set_access_counter = ((l1_cache_size // block_size) // 4) * [0]
 
-    global LLC_total_set_miss_counter
-    global LLC_dc_set_miss_counter
-    global LLC_cc_set_miss_counter
-    LLC_total_set_miss_counter = ((simulations[k][1] // block_size) // 4) * [0]
-    LLC_dc_set_miss_counter = ((simulations[k][1] // block_size) // 4) * [0]
-    LLC_cc_set_miss_counter = [[0 for _ in range(TREE_LEVELS)] for _ in range((simulations[k][1] // block_size) // 4)]
+        global LLC_total_set_miss_counter
+        global LLC_dc_set_miss_counter
+        global LLC_cc_set_miss_counter
+        LLC_total_set_miss_counter = ((simulations[k][1] // block_size) // 4) * [0]
+        LLC_dc_set_miss_counter = ((simulations[k][1] // block_size) // 4) * [0]
+        LLC_cc_set_miss_counter = [[0 for _ in range(TREE_LEVELS)] for _ in
+                                   range((simulations[k][1] // block_size) // 4)]
 
-    global dc_set_miss_counter
+        global dc_set_miss_counter
 
-    dc_set_miss_counter = ((l1_cache_size // block_size) // 4) * [0]
+        dc_set_miss_counter = ((l1_cache_size // block_size) // 4) * [0]
 
-    execution_time = 0  # Reset execution time for each simulation
-    global hits
-    hits = 0
-    global misses
-    misses = 0
-    # memory = Memory(mem_size, block_size)
-    memory = 0
+        execution_time = 0  # Reset execution time for each simulation
+        global hits
+        hits = 0
+        global misses
+        misses = 0
+        # memory = Memory(mem_size, block_size)
+        memory = 0
 
-    LLC = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                2 ** 2, simulations[k][4], simulations[k][5], type="data_cache")
-    # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
+        LLC = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
+                    2 ** 2, simulations[k][4], simulations[k][5], type="data_cache")
+        # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
-    LLC_ctr3 = Cache(simulations[k][1] // 4, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="LRU", write_pol=simulations[k][5], type="ctr_cache")
+        LLC_ctr3 = Cache(simulations[k][1] // 4, simulations[k][0], simulations[k][2],
+                         2 ** 2, replace_pol="RL", write_pol=simulations[k][5], type="ctr_cache")
 
-    LLC_ctr2 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="LRU", write_pol=simulations[k][5], type="ctr_cache")
+        LLC_ctr2 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
+                         2 ** 3, replace_pol="LRU", write_pol=simulations[k][5], type="ctr_cache")
 
-    LLC_ctr1 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="LRU", write_pol=simulations[k][5], type="ctr_cache")
+        LLC_ctr1 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
+                         2 ** 3, replace_pol="LRU", write_pol=simulations[k][5], type="ctr_cache")
 
-    LLC_ctr0 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="LRU", write_pol=simulations[k][5], type="ctr_cache")
+        LLC_ctr0 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
+                         2 ** 3, replace_pol="LRU", write_pol=simulations[k][5], type="ctr_cache")
 
-    l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
-                    type="level1")
-    # l1_cache_cc = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",type="level1_cc")
-    global cc_set_miss_counter
-    cc_set_miss_counter = [0 for _ in range((LLC_ctr3._size // LLC_ctr3._block_size) // LLC_ctr3._mapping_pol)]
-    global cc_set_eviction_counter
-    cc_set_eviction_counter = [0 for _ in range((LLC_ctr3._size // LLC_ctr3._block_size) // LLC_ctr3._mapping_pol)]
-    mapping_str = "{0}-way associative".format(simulations[k][3])
-    print("\nMemory size: " + str(mem_size) +
-          " bytes (" + str(mem_size // block_size) + " blocks)")
-    print("Cache size: " + str(cache_size) +
-          " bytes (" + str(cache_size // block_size) + " lines)")
-    print("Block size: " + str(block_size) + " bytes")
-    print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
-    benchmark_trace(5000000)
-    # benchmark_random_reads()
-    #benchmark_manual()
-    #benchmark_random_reads()
-    #benchmark_manual()
-    Execution_Times[k] = execution_time
-    cache_hits_end[k] = hits
-    cache_misses_end[k] = misses
-    hit_percent[k] = hits / (hits + misses) if (hits + misses) != 0 else 0.0
+        l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
+                        type="level1")
+        # l1_cache_cc = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",type="level1_cc")
+        global cc_set_miss_counter
+        cc_set_miss_counter = [0 for _ in range((LLC_ctr3._size // LLC_ctr3._block_size) // LLC_ctr3._mapping_pol)]
+        global cc_set_eviction_counter
+        cc_set_eviction_counter = [0 for _ in range((LLC_ctr3._size // LLC_ctr3._block_size) // LLC_ctr3._mapping_pol)]
+        mapping_str = "{0}-way associative".format(simulations[k][3])
+        print("\nMemory size: " + str(mem_size) +
+              " bytes (" + str(mem_size // block_size) + " blocks)")
+        print("Cache size: " + str(cache_size) +
+              " bytes (" + str(cache_size // block_size) + " lines)")
+        print("Block size: " + str(block_size) + " bytes")
+        print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
+        benchmark_trace(5000000)
+        # benchmark_random_reads()
+        # benchmark_manual()
+        # benchmark_random_reads()
+        # benchmark_manual()
+        Execution_Times[k] = execution_time
+        cache_hits_end[k] = hits
+        cache_misses_end[k] = misses
+        hit_percent[k] = hits / (hits + misses) if (hits + misses) != 0 else 0.0
+        rl.store_transition([0] * self._state_dim, 0, 0, [0] * self._state_dim, True)
 
 # LLC_ctr.weight_contributions()
 # LLC_ctr.get_weights()
