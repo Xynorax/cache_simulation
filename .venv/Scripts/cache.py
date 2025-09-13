@@ -145,6 +145,8 @@ class Cache:
                 line = candidate
                 break
         # Update use bits of cache line
+        if self._replace_pol == "RL":
+            rl.resolve((address >> 6) << 6)
         if line:
             if (self._replace_pol == Cache.LRU or
                     self._replace_pol == Cache.LFU or self._replace_pol == Cache.modified_LRU):
@@ -163,7 +165,6 @@ class Cache:
                         line.r = 1
                 line.rrpv = 0
             elif self._replace_pol == "RL":
-                rl.resolve(address)
                 if line.hits < 1000:
                     line.hits += 1
                 line.preuse_distance = line.age_counter
@@ -364,7 +365,8 @@ class Cache:
                 if victim_idx != i:
                     way[x] = (set[i].tag << self._tag_shift) + (set_num << self._set_shift)
                     x += 1
-            rl.add_event(evicted_line_addr, address, state, victim_idx, next_state, way[0], way[1], way[2])
+            rl.add_event(evicted_line_addr, ((address >> 6) << 6), state, victim_idx, next_state, way[0], way[1],
+                         way[2])
             return victim_info, l1_victim
 
         # Store victim info if modified

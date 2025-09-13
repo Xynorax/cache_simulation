@@ -1,14 +1,16 @@
+import time
 from collections import deque
 
 import Parameters
 import numpy as np
-from Parameters import WARMUP_INSTRUCTIONS, instructions_number, TREE_LEVELS, RANDOMNESS_MAX_VALUE
+import tensorflow as tf
+from Parameters import TREE_LEVELS, RANDOMNESS_MAX_VALUE
 from tensorflow import keras
 
 
 class rl_agent:
     # --- Hyperparameters ---
-    def __init__(self, gamma=0.95, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.995, batch_size=32, episodes=100):
+    def __init__(self, gamma=0.95, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.999, batch_size=1024, episodes=50):
         self._gamma = gamma  # discount factor
         self._epsilon = epsilon  # exploration rate
         self._epsilon_min = epsilon_min
@@ -18,9 +20,9 @@ class rl_agent:
         self.target_sync = 6000 // self._batch_size
         self.steps = 0
         # --- Replay buffer ---
-        self.memory = deque(maxlen=200)
+        self.memory = deque(maxlen=4096)
         # --- Neural network ---
-        self._state_dim = 100
+        self._state_dim = 56
         self._layer1_dim = 128
         self._hidden_dim = 64
         self._assoc = 4
@@ -47,22 +49,31 @@ class rl_agent:
     def choose_action(self, state):
         if np.random.rand() < self._epsilon:
             return np.random.choice(self._assoc)
-        q_values = self.model.predict(state[np.newaxis], verbose=0)
+        state_vec = np.array(state, dtype=np.float32).reshape(1, -1)
+        q_values = self.model(state_vec, training=False).numpy()
+
         return np.argmax(q_values[0])
 
     def store_transition(self, state, action, reward, next_state, done=False):
-        self.memory.append((state, action, reward, next_state, done))
-        self.replay()
+        if Parameters.instructions_number > 1000000:
+            start = time.time()
+            # code you want to time
+
+            self.memory.append((state, action, reward, next_state, done))
+            end = time.time()
+            print("Store transistion excluding replay:", end - start, "seconds")
+            self.replay()
         if done:
             # Save online model weights
-            model.save_weights("online_model_weights.h5")
+            self.model.save_weights("online_model.weights.h5")
             # Save target model weights
-            target_model.save_weights("target_model_weights.h5")
+            self.target_model.save_weights("target_model.weights.h5")
 
     def replay(self):
-        if len(self.memory) < self._batch_size or instructions_number < WARMUP_INSTRUCTIONS:
+        if len(self.memory) < self._batch_size or Parameters.instructions_number < 1000_000:
             return
         self.steps += 1
+
         minibatch = [self.memory.popleft() for _ in range(self._batch_size)]
         states = np.array([s for s, _, _, _, _ in minibatch])
         actions = np.array([a for _, a, _, _, _ in minibatch])
@@ -70,9 +81,10 @@ class rl_agent:
         next_states = np.array([ns for _, _, _, ns, _ in minibatch])
         dones = np.array([d for _, _, _, _, d in minibatch])
 
+        # code you want to time
         target_q = self.model.predict(states, verbose=0)
         next_q = self.target_model.predict(next_states, verbose=0)
-
+        start_replay = time.time()
         for i in range(self._batch_size):
             target = rewards[i]
             if not dones[i]:
@@ -85,7 +97,8 @@ class rl_agent:
 
         if self._epsilon > self._epsilon_min:
             self._epsilon *= self._epsilon_decay
-
+        end_replay = time.time()
+        print("Replay took:", end_replay - start_replay, "seconds")
     # --- Reward Tracking ---
     def add_event(self, evicted, inserted, state, action, next_state, way0, way1, way2):
         event = {
@@ -97,12 +110,13 @@ class rl_agent:
             "age": Parameters.instructions_number,
             "way0": way0,
             "way1": way1,
-            "way2": way2
+            "way2": way2,
+            "reward": 3
         }
         self.pending_events.append(event)
 
     def resolve(self, access_addr):
-
+        start = time.time()
         for event in self.pending_events:
             if access_addr == event["way0"]:
                 event["way0"] = None
@@ -111,22 +125,23 @@ class rl_agent:
             elif access_addr == event["way2"]:
                 event["way2"] = None
             elif access_addr == event["inserted"]:
-                self.store_transition(event["state"], event["action"], +0.1, event["next_state"])
+                event["reward"] += 0.01
                 event["inserted"] = None
 
             if access_addr == event["evicted"]:
-                self.store_transition(event["state"], event["action"], -1, event["next_state"])
+                self.store_transition(event["state"], event["action"], -3, event["next_state"])
                 self.pending_events.remove(event)
             elif event["way0"] == None and event["way1"] == None and event["way2"] == None and event[
                 "inserted"] == None:
-                self.store_transition(event["state"], event["action"], +3, event["next_state"])
+                self.store_transition(event["state"], event["action"], event["reward"], event["next_state"])
                 self.pending_events.remove(event)
             if Parameters.instructions_number - event["age"] > self.timeout:
                 try:
                     self.pending_events.remove(event)
                 except:
                     pass
-
+        end = time.time()
+        print("resolve() took", end - start, "seconds")
 
 def normalize(x, max_val):
     if max_val == 0: return 0.0
@@ -166,3 +181,4 @@ def build_state(ways_hits, request_address, pc, access_type, access_level, ways_
 
 
 rl = rl_agent()
+print(tf.config.list_physical_devices('GPU'))

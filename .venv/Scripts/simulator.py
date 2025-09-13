@@ -1,6 +1,5 @@
 import csv
 
-import Parameters
 import util
 from NN_replacementv2 import *
 from Parameters import *
@@ -598,9 +597,9 @@ def benchmark_binary_search():  # Benchmark 6 binary search
 
 def benchmark_trace(MAX_INSTRUCTIONS):
     mm = MemoryManager()
-    TRACE_FILE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.champsimtrace"
-    NUMPY_TRACE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.npy"
-    NUMPY_TRACE_PATH = "D:\\Youssef\\TUM\\ChampSim\\429.mcf-51B.npy"
+    # TRACE_FILE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.champsimtrace"
+    # NUMPY_TRACE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.npy"
+    NUMPY_TRACE_PATH = "429.mcf-51B.npy"
     BATCH = 1
     instr_batch = np.load(NUMPY_TRACE_PATH)
     random_64byte = 0xEE
@@ -637,6 +636,7 @@ def benchmark_trace(MAX_INSTRUCTIONS):
 
 for E in range(rl._episodes):
     for k in range(len(simulations)):
+        ctr_cache_misses = 0
         l1_cache_size = (2 ** 15) // 2
         global cc_set_access_counter
         global dc_set_access_counter
@@ -704,6 +704,10 @@ for E in range(rl._episodes):
         cache_misses_end[k] = misses
         hit_percent[k] = hits / (hits + misses) if (hits + misses) != 0 else 0.0
         rl.store_transition([0] * rl._state_dim, 0, 0, [0] * rl._state_dim, True)
+        with open("Episodes.txt", "a") as f:
+            f.write(f"Episode: {E} ")
+            f.write(f"Level 7 miss counter: {ctr_cache_misses} ")
+            f.write(f"Epsilon: {rl._epsilon}\n")
 
 
 # LLC_ctr.weight_contributions()
