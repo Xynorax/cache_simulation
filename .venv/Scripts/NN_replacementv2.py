@@ -1,3 +1,4 @@
+import os
 import time
 from collections import deque
 
@@ -10,7 +11,7 @@ from tensorflow import keras
 
 class rl_agent:
     # --- Hyperparameters ---
-    def __init__(self, gamma=0.95, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.999, batch_size=1024, episodes=50):
+    def __init__(self, gamma=0.95, epsilon=0.1, epsilon_min=0.01, epsilon_decay=0.999, batch_size=1024, episodes=50):
         self._gamma = gamma  # discount factor
         self._epsilon = epsilon  # exploration rate
         self._epsilon_min = epsilon_min
@@ -28,6 +29,13 @@ class rl_agent:
         self._assoc = 4
         self.model = self.build_nn()
         self.target_model = self.build_nn()
+        # --- load weights if available ---
+        if os.path.exists("online_model.weights.h5"):
+            print("Loading saved weights...")
+            self.model.load_weights("online_model.weights.h5")
+            self.target_model.load_weights("target_model.weights.h5")
+        else:
+            print("No saved weights found, starting fresh.")
         # --- Reward Tracker ---
         self.pending_events = []
         self.timeout = 100_000
