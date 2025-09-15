@@ -181,6 +181,13 @@ class Cache:
         """
         tag = self._get_tag(address)  # Tag of cache line
         set = self._get_set(address)  # Set of cache lines
+        seen_tags = []
+        for candidate in set:
+            if candidate.valid:
+                if candidate.tag in seen_tags:
+                    print(f"ERROR: duplicate tag {candidate.tag} in set")
+                else:
+                    seen_tags.append(candidate.tag)
         line = None
         way_index = -1
         # Search for cache line within set
@@ -239,7 +246,7 @@ class Cache:
         tag = self._get_tag(address)  # Tag of cache line
         set = self._get_set(address)  # Set of cache lines
         victim_info = None
-
+        victim_signature = 0
         # Select the victim
         if (self._replace_pol == Cache.LRU or
                 self._replace_pol == Cache.LFU or
@@ -295,17 +302,18 @@ class Cache:
                     for item in set:
                         item.rrpv += 1
             incoming_signature = self._shct.get_signature(pc)
-            if WB_insertion == 1:
-                victim.rrpv = 0
-            elif self._shct.get_counter(incoming_signature) == 0:
+            victim.signature = incoming_signature
+            victim_signature = victim.signature
+            if self._shct.get_counter(incoming_signature) == 0:
                 victim.rrpv = 3
             elif self._shct.get_counter(incoming_signature) == self._shct.max_counter:
                 victim.rrpv = 0
             else:
                 victim.rrpv = 2
             set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
+
             if victim.r == 0 and victim.valid and set_idx in self.sampled_sets:
-                self._shct.decrement_counter(victim.signature)
+                self._shct.decrement_counter(victim_signature)
             if set_idx in self.sampled_sets:
                 victim.r = 0
                 victim.signature = incoming_signature
@@ -432,7 +440,7 @@ class Cache:
         victim.data = data
         victim.level = level
 
-        return victim_info, l1_victim
+        return victim_info, l1_victim, victim_signature
 
     def write(self, address, byte, pc, level):
         """Write a byte to cache.
@@ -461,6 +469,13 @@ class Cache:
                     self._replace_pol == Cache.LFU or
                     self._replace_pol == Cache.modified_LRU):
                 self._update_use(line, set, level)
+            elif (self._replace_pol == "ship_plus"):
+                set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
+                if set_idx in self.sampled_sets:
+                    if line.r == 0:
+                        self._shct.increment_counter(line.signature)
+                        line.r = 1
+                line.rrpv = 0
             elif (self._replace_pol == Cache.RLR):
                 self._update_rlr(line, set)
             elif (self._replace_pol == "pseudo_LRU"):
@@ -582,8 +597,6 @@ class Cache:
             if set_num > set_mask:
                 raise ValueError("Set number = -1")
         index = set_num * self._mapping_pol
-        if self._type == "ctr_cache":
-            print(f"Set Number = {set_num}")
         return self._lines[index:index + self._mapping_pol]
 
     def _update_use(self, line, set, level):
@@ -687,3 +700,20 @@ class Cache:
             if candidate.tag == tag and candidate.valid:
                 candidate.valid = 0
                 break
+
+    def check_is_modified(self, address):
+        tag = self._get_tag(address)  # Tag of cache line
+        set = self._get_set(address)  # Set of cache lines
+        line = None
+
+        # Search for cache line within set
+        for candidate in set:
+            if candidate.tag == tag and candidate.valid:
+                line = candidate
+                break
+        if line == None:
+            return False
+        elif not line.modified:
+            return False
+        else:
+            return True
