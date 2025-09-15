@@ -4,7 +4,6 @@ from collections import deque
 
 import Parameters
 import numpy as np
-import tensorflow as tf
 from Parameters import TREE_LEVELS, RANDOMNESS_MAX_VALUE
 from tensorflow import keras
 
@@ -72,10 +71,12 @@ class rl_agent:
             print("Store transistion excluding replay:", end - start, "seconds")
             self.replay()
         if done:
+
             # Save online model weights
             self.model.save_weights("online_model.weights.h5")
             # Save target model weights
             self.target_model.save_weights("target_model.weights.h5")
+            self.reset()
 
     def replay(self):
         if len(self.memory) < self._batch_size or Parameters.instructions_number < 1000_000:
@@ -151,6 +152,10 @@ class rl_agent:
         end = time.time()
         print("resolve() took", end - start, "seconds")
 
+    def reset(self):
+        self.pending_events.clear()
+        self.steps = 0
+
 def normalize(x, max_val):
     if max_val == 0: return 0.0
     return min(1.0, x / max_val)
@@ -189,4 +194,3 @@ def build_state(ways_hits, request_address, pc, access_type, access_level, ways_
 
 
 rl = rl_agent()
-print(tf.config.list_physical_devices('GPU'))

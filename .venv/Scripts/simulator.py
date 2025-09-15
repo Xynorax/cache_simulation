@@ -694,7 +694,7 @@ for E in range(rl._episodes):
               " bytes (" + str(cache_size // block_size) + " lines)")
         print("Block size: " + str(block_size) + " bytes")
         print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
-        benchmark_trace(5000000)
+        benchmark_trace(1)
         # benchmark_random_reads()
         # benchmark_manual()
         # benchmark_random_reads()
@@ -708,6 +708,7 @@ for E in range(rl._episodes):
             f.write(f"Episode: {E} ")
             f.write(f"Level 7 miss counter: {ctr_cache_misses} ")
             f.write(f"Epsilon: {rl._epsilon}\n")
+        Parameters.reset_parameters()
 
 
 # LLC_ctr.weight_contributions()
