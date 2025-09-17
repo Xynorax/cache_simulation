@@ -10,7 +10,8 @@ from tensorflow import keras
 
 class rl_agent:
     # --- Hyperparameters ---
-    def __init__(self, gamma=0.95, epsilon=0.1, epsilon_min=0.01, epsilon_decay=0.999, batch_size=1024, episodes=50):
+    def __init__(self, gamma=0.95, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.999, batch_size=1024, episodes=50):
+        self.evaluation_mode = False
         self._gamma = gamma  # discount factor
         self._epsilon = epsilon  # exploration rate
         self._epsilon_min = epsilon_min
@@ -19,6 +20,7 @@ class rl_agent:
         self._episodes = episodes
         self.target_sync = 6000 // self._batch_size
         self.steps = 0
+        self.rewards = 0
         # --- Replay buffer ---
         self.memory = deque(maxlen=4096)
         # --- Neural network ---
@@ -54,7 +56,7 @@ class rl_agent:
         self.target_model.set_weights(self.model.get_weights())
 
     def choose_action(self, state):
-        if np.random.rand() < self._epsilon:
+        if np.random.rand() < self._epsilon and self.evaluation_mode == False:
             return np.random.choice(self._assoc)
         state_vec = np.array(state, dtype=np.float32).reshape(1, -1)
         q_values = self.model(state_vec, training=False).numpy()
@@ -62,6 +64,8 @@ class rl_agent:
         return np.argmax(q_values[0])
 
     def store_transition(self, state, action, reward, next_state, done=False):
+        if self.evaluation_mode:
+            return
         if Parameters.instructions_number > 1000000:
             start = time.time()
             # code you want to time
@@ -70,6 +74,7 @@ class rl_agent:
             end = time.time()
             print("Store transistion excluding replay:", end - start, "seconds")
             self.replay()
+            self.rewards += reward
         if done:
 
             # Save online model weights
@@ -79,6 +84,8 @@ class rl_agent:
             self.reset()
 
     def replay(self):
+        if self.evaluation_mode:
+            return
         if len(self.memory) < self._batch_size or Parameters.instructions_number < 1000_000:
             return
         self.steps += 1
@@ -110,6 +117,8 @@ class rl_agent:
         print("Replay took:", end_replay - start_replay, "seconds")
     # --- Reward Tracking ---
     def add_event(self, evicted, inserted, state, action, next_state, way0, way1, way2):
+        if self.evaluation_mode:
+            return
         event = {
             "evicted": evicted,
             "inserted": inserted,
@@ -125,6 +134,8 @@ class rl_agent:
         self.pending_events.append(event)
 
     def resolve(self, access_addr):
+        if self.evaluation_mode:
+            return
         start = time.time()
         for event in self.pending_events:
             if access_addr == event["way0"]:
@@ -155,6 +166,7 @@ class rl_agent:
     def reset(self):
         self.pending_events.clear()
         self.steps = 0
+        self.rewards = 0
 
 def normalize(x, max_val):
     if max_val == 0: return 0.0

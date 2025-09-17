@@ -1,4 +1,5 @@
 import csv
+import importlib
 
 import util
 from NN_replacementv2 import *
@@ -613,8 +614,6 @@ def benchmark_trace(MAX_INSTRUCTIONS):
         print(ctr_cache_misses)
         instr = instr_batch[x]
         Parameters.instructions_number += 1
-        if Parameters.instructions_number == 1100000:
-            print("Debug Point!")
         print(f"Instruction number:{Parameters.instructions_number}")
         program_counter = instr[0]
         if instr[9] == 0 and instr[10] == 0 and instr[11] == 0 and instr[12] == 0 and instr[13] == 0 and instr[14] == 0:
@@ -637,6 +636,8 @@ def benchmark_trace(MAX_INSTRUCTIONS):
 for E in range(rl._episodes):
     for k in range(len(simulations)):
         ctr_cache_misses = 0
+        LLC_ctr_level_hits = [0] * TREE_LEVELS
+        LLC_ctr_level_misses = [0] * TREE_LEVELS
         l1_cache_size = (2 ** 15) // 2
         global cc_set_access_counter
         global dc_set_access_counter
@@ -694,7 +695,7 @@ for E in range(rl._episodes):
               " bytes (" + str(cache_size // block_size) + " lines)")
         print("Block size: " + str(block_size) + " bytes")
         print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
-        benchmark_trace(1)
+        benchmark_trace(500000)
         # benchmark_random_reads()
         # benchmark_manual()
         # benchmark_random_reads()
@@ -707,8 +708,11 @@ for E in range(rl._episodes):
         with open("Episodes.txt", "a") as f:
             f.write(f"Episode: {E} ")
             f.write(f"Level 7 miss counter: {ctr_cache_misses} ")
-            f.write(f"Epsilon: {rl._epsilon}\n")
-        Parameters.reset_parameters()
+            f.write(f"Epsilon: {rl._epsilon}")
+            f.write(f"Rewards: {rl.rewards}")
+            f.write(f"Cache level hits: {LLC_ctr_level_hits}\n")
+            f.write(f"Cache level misses: {LLC_ctr_level_misses}\n")
+        importlib.reload(Parameters)
 
 
 # LLC_ctr.weight_contributions()
