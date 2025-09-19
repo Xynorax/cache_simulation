@@ -62,6 +62,7 @@ level2_cc_trace = []
 level3_cc_trace = []
 lazy_updated = False
 lazy_update_active = True
+lazy_update_misses = 0
 total_evictions = 0
 ###Randomness calculator variables###
 previous_address = 0
@@ -100,3 +101,4 @@ level_misses = [0] * TREE_LEVELS
 level_access_counter = [0] * TREE_LEVELS
 LLC_ctr_level_hits = [0] * TREE_LEVELS
 LLC_ctr_level_misses = [0] * TREE_LEVELS
+lazy_update_level_misses = [0] * TREE_LEVELS

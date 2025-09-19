@@ -60,15 +60,16 @@ def lazy_update(node_address, pc):
             LLC_ctr.write(parent_address, byte, pc, level=level)
         if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
             if hit == True:
-                global ctr_cache_hits
-                ctr_cache_hits += 1
-                global LLC_ctr_level_hits
-                LLC_ctr_level_hits[level] += 1
+                global lazy_update_misses
+                lazy_update_misses += 1
+                # global LLC_ctr_level_hits
+                # LLC_ctr_level_hits[level] += 1
             else:
-                global ctr_cache_misses
-                ctr_cache_misses += 1
-                global LLC_ctr_level_misses
-                LLC_ctr_level_misses[level] += 1
+                global lazy_update_level_misses
+                lazy_update_level_misses[level] += 1
+                # ctr_cache_misses += 1
+                # global LLC_ctr_level_misses
+                #LLC_ctr_level_misses[level] += 1
         if hit == False:
             if level != 0:
                 lazy_update(parent_address, pc)
@@ -645,7 +646,7 @@ for k in range(len(simulations)):
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
     LLC_ctr = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                    2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                    2 ** 5, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
@@ -661,7 +662,7 @@ for k in range(len(simulations)):
           " bytes (" + str(cache_size // block_size) + " lines)")
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
-    benchmark_trace(1_300_000)
+    benchmark_trace(5_000_000)
     # benchmark_random_reads()
     #benchmark_manual()
     #benchmark_random_reads()
@@ -727,6 +728,8 @@ print(LLC_ctr_level_hits)
 print("Counter level misses in LLC counter cache")
 print(LLC_ctr_level_misses)
 print(f"Total eviction number: {Parameters.total_evictions}")
+print("Lazy update misses:", lazy_update_misses)
+print("Lazy update level misses:", lazy_update_level_misses)
 with open(f"set_miss_counters_{LLC_ctr._mapping_pol}_way.csv", "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(["Set Index", "Miss Count"])

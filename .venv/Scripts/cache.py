@@ -6,7 +6,7 @@ import reward_tracker
 import tensorflow as tf
 import util
 from NN_replacement import NNReplacementPolicy, build_state
-from Parameters import smart_set_indexing, randomness, randomness_num_entries
+from Parameters import smart_set_indexing, randomness, randomness_num_entries, TREE_LEVELS
 from line import Line
 
 
@@ -50,10 +50,19 @@ class Cache:
         # Bit offset of cache line set
         self._set_shift = int(log(self._block_size, 2))
         if self._replace_pol == Cache.ship_plus:
-            self._shct = self.SHCT()
-            total_sets = size // (block_size * mapping_pol)
-            spacing = total_sets // 16
-            self.sampled_sets = {i for i in range(0, total_sets, spacing)}
+            if self._type == "ctr_cache":
+                self._shct = self.SHCT()
+                total_sets = size // (block_size * mapping_pol)
+                spacing = total_sets // 16
+                if total_sets > 32:
+                    self.sampled_sets = {i for i in range((total_sets * 3) // 4, total_sets, 1)}
+                else:
+                    self.sampled_sets = {i for i in range(0, total_sets, spacing)}
+            else:
+                self._shct = self.SHCT()
+                total_sets = size // (block_size * mapping_pol)
+                spacing = total_sets // 16
+                self.sampled_sets = {i for i in range(0, total_sets, spacing)}
         if self._replace_pol == "RL":
             self.tracker = self.RewardTracker()
             self.nn_policy = NNReplacementPolicy()
@@ -218,7 +227,8 @@ class Cache:
                 self._plru_update(set_num, way_index)
             elif (self._replace_pol == Cache.ship_plus):
                 set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
-                if set_idx in self.sampled_sets:
+                if set_idx in self.sampled_sets and (
+                        level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
                     if line.r == 0:
                         self._shct.increment_counter(line.signature)
                         line.r = 1
@@ -236,7 +246,7 @@ class Cache:
 
         return line.data if line else line
 
-    def load(self, address, data, pc, level, WB_insertion=0, lazy_update=0):
+    def load(self, address, data, pc, level=TREE_LEVELS, WB_insertion=0, lazy_update=0):
         """Load a block of memory into the cache.
 
         :param int address: memory address for data to load to cache
@@ -291,32 +301,59 @@ class Cache:
                     break
             if self._type == "ctr_cache":
                 Parameters.total_evictions += 1
-            if victim == None:
+            possible_victims = []
+            """if victim == None:
                 while victim == None:
-                    for index in range(len(set)):  # Check which line has RRPV = 3
-                        if set[index].rrpv == 3:
+                    for index in range(len(set)):  # Check which line has RRPV = 7
+                        if set[index].rrpv == 7:
                             victim = set[index]
                             break
                     if victim != None:
                         break
                     for item in set:
-                        item.rrpv += 1
+                        item.rrpv += 1"""
+            if victim == None:
+                while (not possible_victims):
+                    for i in set:
+                        if i.rrpv == 7:
+                            possible_victims.append(i)
+                    if not possible_victims:
+                        for item in set:
+                            item.rrpv += 1
+                victim = possible_victims[0]
+                for possible_victim in possible_victims:
+                    if possible_victim.level > victim.level:
+                        victim = possible_victim
+
             incoming_signature = self._shct.get_signature(pc)
-            victim.signature = incoming_signature
             victim_signature = victim.signature
+
+            if self._type == "ctr_cache":
+                n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
+                mask = (1 << n) - 1
+                victim_address = victim.tag << (self._tag_shift) | (
+                        ((address >> self._set_shift) & mask) << self._set_shift)
+                print("Evicted: ", victim_address)
+                for i in set:
+                    print("rrpv values:", i.rrpv)
             if self._shct.get_counter(incoming_signature) == 0:
-                victim.rrpv = 3
+                victim.rrpv = 7
             elif self._shct.get_counter(incoming_signature) == self._shct.max_counter:
                 victim.rrpv = 0
             else:
-                victim.rrpv = 2
+                victim.rrpv = 3
             set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
 
-            if victim.r == 0 and victim.valid and set_idx in self.sampled_sets:
+            if victim.r == 0 and victim.valid and set_idx in self.sampled_sets and (
+                    level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
                 self._shct.decrement_counter(victim_signature)
             if set_idx in self.sampled_sets:
-                victim.r = 0
-                victim.signature = incoming_signature
+                if (level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
+                    victim.r = 0
+                    victim.signature = incoming_signature
+                else:
+                    victim.r = 0
+                    victim.signature = 0
 
 
 
@@ -471,7 +508,8 @@ class Cache:
                 self._update_use(line, set, level)
             elif (self._replace_pol == "ship_plus"):
                 set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
-                if set_idx in self.sampled_sets:
+                if set_idx in self.sampled_sets and (
+                        level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
                     if line.r == 0:
                         self._shct.increment_counter(line.signature)
                         line.r = 1
