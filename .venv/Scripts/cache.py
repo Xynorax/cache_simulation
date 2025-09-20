@@ -4,8 +4,8 @@ from math import log
 import Parameters
 import tensorflow as tf
 import util
-from NN_replacementv2 import build_state, rl
-from Parameters import smart_set_indexing, randomness, randomness_num_entries
+from NN_replacementv2 import build_state, rl, TREE_LEVELS
+from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct
 from line import Line
 
 
@@ -126,9 +126,7 @@ class Cache:
             index = signature % self.num_entries
             return self.counters[index]
 
-
-
-    def read(self, address, pc, level):
+    def read(self, address, pc, level, lazy_update=0):
         """Read a block of memory from the cache.
 
         :param int address: memory address for data to read from cache
@@ -158,12 +156,15 @@ class Cache:
                 set_num = (address >> self._set_shift) & set_mask
                 self._plru_update(set_num, way_index)
             elif (self._replace_pol == Cache.ship_plus):
-                set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
-                if set_idx in self.sampled_sets:
-                    if line.r == 0:
-                        self._shct.increment_counter(line.signature)
-                        line.r = 1
-                line.rrpv = 0
+                if not lazy_update:
+                    if (level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
+                        set_idx = (address >> self._set_shift) & (
+                                    (self._size // (self._block_size * self._mapping_pol)) - 1)
+                        if set_idx in self.sampled_sets:
+                            if line.r == 0:
+                                global_shct.increment_counter(line.signature)
+                                line.r = 1
+                        line.rrpv = 0
             elif self._replace_pol == "RL":
                 if line.hits < 1000:
                     line.hits += 1
@@ -232,7 +233,8 @@ class Cache:
                     break
             if self._type == "ctr_cache":
                 Parameters.total_evictions += 1
-            if victim == None:
+            possible_victims = []
+            """if victim == None:
                 while victim == None:
                     for index in range(len(set)):  # Check which line has RRPV = 3
                         if set[index].rrpv == 3:
@@ -241,22 +243,44 @@ class Cache:
                     if victim != None:
                         break
                     for item in set:
-                        item.rrpv += 1
-            incoming_signature = self._shct.get_signature(pc)
-            if WB_insertion == 1:
+                        item.rrpv += 1"""
+            if victim == None:
+                while (not possible_victims):
+                    for i in set:
+                        if i.rrpv == 7:
+                            possible_victims.append(i)
+                    if not possible_victims:
+                        for item in set:
+                            item.rrpv += 1
+                victim = possible_victims[0]
+                for possible_victim in possible_victims:
+                    if possible_victim.level > victim.level:
+                        victim = possible_victim
+            incoming_signature = global_shct.get_signature(pc)
+            if lazy_update:
+                if Parameters.randomness > 64:
+                    victim.rrpv = 2
+                else:
+                    victim.rrpv = 3
+            elif WB_insertion == 1:
                 victim.rrpv = 0
-            elif self._shct.get_counter(incoming_signature) == 0:
+            elif global_shct.get_counter(incoming_signature) == 0:
                 victim.rrpv = 3
-            elif self._shct.get_counter(incoming_signature) == self._shct.max_counter:
+            elif global_shct.get_counter(incoming_signature) == global_shct.max_counter:
                 victim.rrpv = 0
             else:
                 victim.rrpv = 2
             set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
             if victim.r == 0 and victim.valid and set_idx in self.sampled_sets:
-                self._shct.decrement_counter(victim.signature)
+                if (level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
+                    global_shct.decrement_counter(victim.signature)
             if set_idx in self.sampled_sets:
-                victim.r = 0
-                victim.signature = incoming_signature
+                if (level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
+                    victim.r = 0
+                    victim.signature = incoming_signature
+                else:
+                    victim.r = 0
+                    victim.signature = -1
 
 
 
@@ -377,16 +401,18 @@ class Cache:
         l1_victim = None
         if victim.modified and victim.valid:
             victim_info = (victim_address)
-        elif victim.valid:
+        if victim.valid:
             l1_victim = (victim_address)
-
+        print("Evicted:", victim_address)
+        print("Inserted:", (address >> 6) << 6)
         # Replace victim
         victim.modified = 0
         victim.valid = 1
         victim.tag = tag
         victim.data = data
         victim.level = level
-
+        if level == TREE_LEVELS - 2 and l1_victim != None:
+            print("Debug")
         return victim_info, l1_victim
 
     def write(self, address, byte, pc, level):

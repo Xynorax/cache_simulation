@@ -60,7 +60,8 @@ level1_cc_trace = []
 level2_cc_trace = []
 level3_cc_trace = []
 lazy_updated = False
-lazy_update_active = False
+lazy_update_active = True
+lazy_update_misses = 0
 total_evictions = 0
 ###Randomness calculator variables###
 previous_address = 0
@@ -99,3 +100,80 @@ level_misses = [0] * TREE_LEVELS
 level_access_counter = [0] * TREE_LEVELS
 LLC_ctr_level_hits = [0] * TREE_LEVELS
 LLC_ctr_level_misses = [0] * TREE_LEVELS
+lazy_update_level_misses = [0] * TREE_LEVELS
+
+
+class SHCT:
+    """
+    Signature History Counter Table implementation
+    Based on the SHiP++ cache replacement policy
+    """
+
+    def __init__(self, num_entries=65536, counter_bits=3):
+        """
+        Initialize SHCT
+
+        Args:
+            num_entries: Number of entries in the table (default: 16K)
+            counter_bits: Number of bits per counter (default: 3-bit)
+        """
+        self.num_entries = num_entries
+        self.counter_bits = counter_bits
+        self.max_counter = (1 << counter_bits) - 1  # 2^3 - 1 = 7
+        self.min_counter = 0
+
+        # Initialize all counters to 0
+        self.counters = [0] * num_entries
+
+        # Statistics
+        self.hits = 0
+        self.evictions = 0
+        self.updates = 0
+
+    def get_signature(self, pc, is_prefetch=False):
+        """
+        Calculate signature from PC
+
+        Args:
+            pc: Program Counter
+            is_prefetch: Whether this is a prefetch access
+
+        Returns:
+            14-bit signature
+        """
+        if is_prefetch:
+            # SHiP++ enhancement: separate signatures for prefetch
+            signature = ((pc << 1) + 1) & 0xFFFF  # 14-bit mask
+        else:
+            signature = (pc << 1) & 0xFFFF  # 14-bit mask
+
+        return signature
+
+    def increment_counter(self, signature):
+        """
+        Increment counter for a signature (on cache hit)
+
+        Args:
+            signature: 14-bit signature
+        """
+        index = signature % self.num_entries
+        if self.counters[index] < self.max_counter:
+            self.counters[index] += 1
+
+    def decrement_counter(self, signature):
+        """
+        Decrement counter for a signature (on eviction without reuse)
+
+        Args:
+            signature: 14-bit signature
+        """
+        index = signature % self.num_entries
+        if self.counters[index] > self.min_counter:
+            self.counters[index] -= 1
+
+    def get_counter(self, signature):
+        index = signature % self.num_entries
+        return self.counters[index]
+
+
+global_shct = SHCT()

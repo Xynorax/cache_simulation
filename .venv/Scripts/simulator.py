@@ -59,14 +59,15 @@ def lazy_update(node_address, pc):
         else:
             update_cache = LLC_ctr0
 
-        cache_block = update_cache.read(parent_address, pc, level=level)
+        cache_block = update_cache.read(parent_address, pc, level=level, lazy_update=1)
         if cache_block:
             update_cache.write(parent_address, byte, pc, level=level)
             hit = True
-        else:  #
-            victim_address, non_modified_victim = update_cache.load(parent_address, data=bytearray(8), pc=pc,
-                                                                    level=level, lazy_update=1)
-            update_cache.write(parent_address, byte, pc, level=level)
+        else:
+            # victim_address, non_modified_victim = update_cache.load(parent_address, data=bytearray(8), pc=pc,
+            # level=level, lazy_update=1)
+            # update_cache.write(parent_address, byte, pc, level=level)
+            print("")
         if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
             if hit == True:
                 global ctr_cache_hits
@@ -74,10 +75,10 @@ def lazy_update(node_address, pc):
                 global LLC_ctr_level_hits
                 LLC_ctr_level_hits[level] += 1
             else:
-                global ctr_cache_misses
-                ctr_cache_misses += 1
-                global LLC_ctr_level_misses
-                LLC_ctr_level_misses[level] += 1
+                global lazy_update_misses
+                lazy_update_misses += 1
+                global lazy_update_level_misses
+                lazy_update_level_misses[level] += 1
         if hit == False:
             if level != 0:
                 lazy_update(parent_address, pc)
@@ -88,11 +89,18 @@ def lazy_update(node_address, pc):
 def promotion(address, cache, pc, level=TREE_LEVELS, modified=False):
     block = bytearray(8)
     cache_block = cache.read(address, pc, level=level)
+    victim_address = None
     if cache_block and not modified:
         return
-    victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
-    if modified:
+    elif cache_block and modified:
         cache.write(address, block, pc, level=level)
+        return
+    elif not cache_block and modified:
+        victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
+        cache.write(address, block, pc, level=level)
+    else:
+        victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
+
     if victim_address != None:
         lazy_update(victim_address, pc)
 
@@ -208,6 +216,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 ctr_cache_misses += 1
                 global LLC_ctr_level_misses
                 LLC_ctr_level_misses[level] += 1
+                print("read miss!")
 
         if victim_address != None:
             lazy_update(victim_address, pc)
@@ -285,7 +294,7 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS, from_l1=False):
                     modified = False
                     if victim_address == non_modified_victim:
                         modified = True
-                    promotion(non_modified_victim, LLC, pc, level=level, modified=True)
+                    promotion(non_modified_victim, LLC, pc, level=level, modified=modified)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_misses
                 l1_misses += 1
@@ -480,6 +489,8 @@ class MemoryAccess:
                     cache_hit = False
                     if lazy_update_active:
                         break
+                else:
+                    print("write miss")
 
     def compute_counter_addresses(self, cpu_address, current_level, root_index, tree_offset, dataNodeNum):
 
@@ -598,7 +609,7 @@ def benchmark_binary_search():  # Benchmark 6 binary search
 def benchmark_trace(MAX_INSTRUCTIONS):
     mm = MemoryManager()
     # TRACE_FILE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.champsimtrace"
-    # NUMPY_TRACE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.npy"
+    #NUMPY_TRACE_PATH = "D:\\Youssef\\TUM\\ChampSim\\400.perlbench-41B.npy"
     NUMPY_TRACE_PATH = "429.mcf-51B.npy"
     BATCH = 1
     instr_batch = np.load(NUMPY_TRACE_PATH)
@@ -609,8 +620,8 @@ def benchmark_trace(MAX_INSTRUCTIONS):
     # instr_batch = parse_champsim_trace_line_fast(TRACE_FILE_PATH, i, BATCH)
     for x in range(MAX_INSTRUCTIONS):
         global ctr_cache_misses
-        print("Counter Cache Misses")
-        print(ctr_cache_misses)
+        print("Counter Cache Misses: ", ctr_cache_misses)
+        print("Randomness :", Parameters.randomness)
         instr = instr_batch[x]
         Parameters.instructions_number += 1
         if Parameters.instructions_number == 1100000:
@@ -668,16 +679,16 @@ for k in range(len(simulations)):
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
     LLC_ctr3 = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                     2 ** 2, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
     LLC_ctr2 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
-                     2 ** 2, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
     LLC_ctr1 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                     2 ** 2, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
     LLC_ctr0 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                     2 ** 2, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
@@ -693,7 +704,7 @@ for k in range(len(simulations)):
           " bytes (" + str(cache_size // block_size) + " lines)")
     print("Block size: " + str(block_size) + " bytes")
     print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
-    benchmark_trace(5000000)
+    benchmark_trace(5_000_000)
     # benchmark_random_reads()
     # benchmark_manual()
     # benchmark_random_reads()
@@ -748,6 +759,8 @@ print(LLC_ctr_level_hits)
 print("Counter level misses in LLC counter cache")
 print(LLC_ctr_level_misses)
 print(f"Total eviction number: {Parameters.total_evictions}")
+print("Lazy update misses:", lazy_update_misses)
+print("Lazy update level misses:", lazy_update_level_misses)
 with open(f"set_miss_counters_{LLC_ctr3._mapping_pol}_way.csv", "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(["Set Index", "Miss Count"])
