@@ -7,36 +7,6 @@ from cache import Cache
 from translation import *
 
 
-def find_parent_node(nodeAddr):
-    tree_level_address = [0] * TREE_LEVELS
-    print(f"Find the parent of {nodeAddr}")
-    tree_index = int((nodeAddr - TREE_START_ADDRESS) // TREE_SIZE)
-    if tree_index < 0:
-        tree_index = int((nodeAddr - MEMORY_START_ADDR) // IND_TREE_SIZE)
-        node_index = (nodeAddr - tree_index * (NUM_DATA_BLOCKS)) // (block_size)
-        TreeNodeOffset = node_index * TREE_DATA_SIZE
-        TreeNodeNegativeOffset = TREE_DATA_SIZE * DATA_MEM_SIZE / (TREE_ROOTS * block_size)
-        treeNodeAddr = int(
-            (TREE_START_ADDRESS + (tree_index + 1) * TREE_SIZE) - TreeNodeNegativeOffset + TreeNodeOffset)
-        if treeNodeAddr >> 33 & 1 == 0:
-            None
-        return treeNodeAddr, (TREE_LEVELS - 1)
-    tree_level_address[0] = tree_start_addresses[tree_index]
-    i_treeNodeAddr = 6
-    for i in range(1, TREE_LEVELS):
-        tree_level_address[i] = tree_level_address[i - 1] + (TREE_DATA_SIZE << (TREE_ARITY_BITS * i))
-        if tree_level_address[i] > nodeAddr:
-            i_treeNodeAddr = i
-            print(f"i_treeNodeAddr = {nodeAddr}")
-            break
-
-    node_index = (nodeAddr - tree_level_address[i_treeNodeAddr]) // TREE_DATA_SIZE
-    node_index = int(node_index) >> TREE_ARITY_BITS
-    TreeNodeOffset = node_index * TREE_DATA_SIZE
-    parent_node_addr = int(tree_level_address[i_treeNodeAddr - 1] + TreeNodeOffset)
-    return parent_node_addr, (i_treeNodeAddr - 1)
-
-
 def lazy_update(node_address, pc):
     if lazy_update_active == True:
         byte = bytearray(8)
@@ -124,6 +94,21 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 global hits
                 hits += 1
         elif cache._type == "level1":
+            parent_address, parent_level = find_parent_node(address)
+            if parent_level == TREE_LEVELS - 1:
+                update_cache = LLC_ctr3
+            elif parent_level == TREE_LEVELS - 2:
+                update_cache = LLC_ctr2
+            elif parent_level == TREE_LEVELS - 3:
+                update_cache = LLC_ctr1
+            else:
+                update_cache = LLC_ctr0
+            signature = global_shct.get_signature(pc)
+            if global_shct.prefetch_state[signature] == 1:
+                if global_shct.stride[signature] < 2:
+                    update_cache.update_parent_rrpv(parent_address)
+
+
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_hits
                 l1_hits += 1
@@ -132,6 +117,19 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 global l1_hits_cc
                 l1_hits_cc += 1
         elif cache._type == "ctr_cache":
+            parent_address, parent_level = find_parent_node(address)
+            if parent_level == TREE_LEVELS - 1:
+                update_cache = LLC_ctr3
+            elif parent_level == TREE_LEVELS - 2:
+                update_cache = LLC_ctr2
+            elif parent_level == TREE_LEVELS - 3:
+                update_cache = LLC_ctr1
+            else:
+                update_cache = LLC_ctr0
+            signature = global_shct.get_signature(pc)
+            if global_shct.prefetch_state[signature] == 1:
+                if global_shct.stride[signature] < 2:
+                    update_cache.update_parent_rrpv(parent_address)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_hits
                 global LLC_ctr_level_hits
@@ -442,11 +440,10 @@ class MemoryAccess:
         self._pc = pc
 
         global previous_address
-        address_diff = abs(np.int64(address) - np.int64(previous_address))
-        if address_diff > (TREE_ARITY ** 1) * block_size and Parameters.randomness <= RANDOMNESS_MAX_VALUE:
-            Parameters.randomness += 1
-        else:
-            Parameters.randomness = 0
+        address_diff = (abs(np.int64(address) - np.int64(previous_address))) // (64 * 8)
+        signature = global_shct.get_signature(self._pc)
+        global_shct.compare_stride(signature, address_diff)
+        global_shct.store_address(signature, address_diff, address)
 
         previous_address = address
         global cache_hit

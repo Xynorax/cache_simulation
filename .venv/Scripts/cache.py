@@ -266,7 +266,7 @@ class Cache:
                 victim.rrpv = 0
             elif global_shct.get_counter(incoming_signature) == 0:
                 victim.rrpv = 3
-            elif global_shct.get_counter(incoming_signature) == global_shct.max_counter:
+            elif (global_shct.get_counter(incoming_signature) == global_shct.max_counter):
                 victim.rrpv = 0
             else:
                 victim.rrpv = 2
@@ -281,7 +281,6 @@ class Cache:
                 else:
                     victim.r = 0
                     victim.signature = -1
-
 
 
         elif self._replace_pol == "pseudo_LRU":
@@ -667,4 +666,14 @@ class Cache:
         for candidate in set:
             if candidate.tag == tag and candidate.valid:
                 candidate.valid = 0
+                break
+
+    def update_parent_rrpv(self, address):
+        tag = self._get_tag(address)  # Tag of cache line
+        set = self._get_set(address)  # Set of cache lines
+        line = None
+        # Search for cache line within set
+        for candidate in set:
+            if candidate.tag == tag and candidate.valid:
+                candidate.rrpv = 0
                 break

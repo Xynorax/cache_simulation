@@ -130,6 +130,24 @@ class SHCT:
         self.evictions = 0
         self.updates = 0
 
+        # Prefetch
+        self.stride = [0] * num_entries
+        self.previous_address = [0] * num_entries
+        self.prefetch_state = [0] * num_entries  # 0 for transient, 1 for steady. Steady state means stride is constant
+
+    def compare_stride(self, signature, address_diff):
+        current_stride = self.stride[signature]
+        if address_diff == current_stride:
+            self.prefetch_state[signature] = 1
+            return current_stride
+        else:
+            self.prefetch_state[signature] = -1
+            return -1
+
+    def store_address(self, signature, address_diff, address):
+        self.stride[signature] = address_diff
+        self.previous_address[signature] = address
+
     def get_signature(self, pc, is_prefetch=False):
         """
         Calculate signature from PC
@@ -176,4 +194,79 @@ class SHCT:
         return self.counters[index]
 
 
+class tree_table:
+    def __init__(self, tree_arity, tree_roots, accuracy=TREE_LEVELS - 1):
+        self.num_entries = 64 * 8 * 8 * 8
+        self.counters = [0] * self.num_entries
+        self.accuracy = accuracy
+        self.max_counter = 16
+        self.min_counter = 0
+
+    def get_index(self, address, level):
+        index = 0
+        index_part = [0] * self.accuracy
+        if address < TREE_START_ADDRESS:
+            index = int(((address) // 64) // (TREE_ROOTS)) // TREE_ARITY ** 3
+        else:
+            if level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS - 3:
+                tree_index = int((address - TREE_START_ADDRESS) // TREE_SIZE)
+                level_address = tree_start_addresses[tree_index]
+                for i in range(level):
+                    level_address += block_size * TREE_ARITY ** i
+                subtree_index = int((address - level_address) // 64) // (TREE_ARITY ** (level - 3))
+                index = subtree_index + tree_index * TREE_ARITY * 3
+        return index
+
+    def increment_counter(self, address, level):
+        index = self.get_index(address, level)
+        if self.counters[index] < self.max_counter:
+            self.counters[index] += 1
+
+    def decrement_counter(self, address, level):
+        index = self.get_index(address, level)
+        if self.counters[index] > self.min_counter:
+            self.counters[index] -= 1
+
+    def decrement_counter_by_index(self, index):
+        if self.counters[index] > self.min_counter:
+            self.counters[index] -= 1
+
+    def get_counter(self, address, level):
+        index = self.get_index(address, level)
+        return self.counters[index]
+
+    def get_counter_by_index(self, index):
+        return self.counters[index]
+
 global_shct = SHCT()
+global_tree_table = tree_table(TREE_ARITY, TREE_ROOTS, 5)
+
+
+def find_parent_node(nodeAddr):
+    tree_level_address = [0] * TREE_LEVELS
+    print(f"Find the parent of {nodeAddr}")
+    tree_index = int((nodeAddr - TREE_START_ADDRESS) // TREE_SIZE)
+    if tree_index < 0:
+        tree_index = int((nodeAddr - MEMORY_START_ADDR) // IND_TREE_SIZE)
+        node_index = (nodeAddr - tree_index * (NUM_DATA_BLOCKS)) // (block_size)
+        TreeNodeOffset = node_index * TREE_DATA_SIZE
+        TreeNodeNegativeOffset = TREE_DATA_SIZE * DATA_MEM_SIZE / (TREE_ROOTS * block_size)
+        treeNodeAddr = int(
+            (TREE_START_ADDRESS + (tree_index + 1) * TREE_SIZE) - TreeNodeNegativeOffset + TreeNodeOffset)
+        if treeNodeAddr >> 33 & 1 == 0:
+            None
+        return treeNodeAddr, (TREE_LEVELS - 1)
+    tree_level_address[0] = tree_start_addresses[tree_index]
+    i_treeNodeAddr = 6
+    for i in range(1, TREE_LEVELS):
+        tree_level_address[i] = tree_level_address[i - 1] + (TREE_DATA_SIZE << (TREE_ARITY_BITS * i))
+        if tree_level_address[i] > nodeAddr:
+            i_treeNodeAddr = i
+            print(f"i_treeNodeAddr = {nodeAddr}")
+            break
+
+    node_index = (nodeAddr - tree_level_address[i_treeNodeAddr]) // TREE_DATA_SIZE
+    node_index = int(node_index) >> TREE_ARITY_BITS
+    TreeNodeOffset = node_index * TREE_DATA_SIZE
+    parent_node_addr = int(tree_level_address[i_treeNodeAddr - 1] + TreeNodeOffset)
+    return parent_node_addr, (i_treeNodeAddr - 1)
