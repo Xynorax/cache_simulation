@@ -7,6 +7,36 @@ from cache import Cache
 from translation import *
 
 
+def prefetch(address, pc):
+    signature = global_shct.get_signature(pc)
+    prefetch_state = global_shct.prefetch_state[signature]
+    if global_shct.prefetch_state[signature] != -1:
+        stride = global_shct.stride[signature]
+        parent_address = address
+        if stride > 64:
+            for i in range(4):
+                parent_address, level = find_parent_node(parent_address)
+            update_cache = LLC_ctr0
+        elif stride > 8:
+            for i in range(3):
+                parent_address, level = find_parent_node(parent_address)
+            update_cache = LLC_ctr1
+        elif stride > 1:
+            for i in range(2):
+                parent_address, level = find_parent_node(parent_address)
+            update_cache = LLC_ctr2
+        else:
+            parent_address, level = find_parent_node(parent_address)
+            update_cache = LLC_ctr3
+
+        byte = bytearray(8)
+        victim_address = None
+        cache_block = update_cache.read(parent_address, pc, level=level, lazy_update=1)
+        if not cache_block:
+            victim_address, non_modified_victim = update_cache.load(parent_address, byte, pc, level=level)
+        if victim_address != None:
+            lazy_update(victim_address, pc)
+
 def lazy_update(node_address, pc):
     if lazy_update_active == True:
         byte = bytearray(8)
@@ -94,19 +124,6 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 global hits
                 hits += 1
         elif cache._type == "level1":
-            parent_address, parent_level = find_parent_node(address)
-            if parent_level == TREE_LEVELS - 1:
-                update_cache = LLC_ctr3
-            elif parent_level == TREE_LEVELS - 2:
-                update_cache = LLC_ctr2
-            elif parent_level == TREE_LEVELS - 3:
-                update_cache = LLC_ctr1
-            else:
-                update_cache = LLC_ctr0
-            signature = global_shct.get_signature(pc)
-            if global_shct.prefetch_state[signature] == 1:
-                if global_shct.stride[signature] < 2:
-                    update_cache.update_parent_rrpv(parent_address)
 
 
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
@@ -117,19 +134,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 global l1_hits_cc
                 l1_hits_cc += 1
         elif cache._type == "ctr_cache":
-            parent_address, parent_level = find_parent_node(address)
-            if parent_level == TREE_LEVELS - 1:
-                update_cache = LLC_ctr3
-            elif parent_level == TREE_LEVELS - 2:
-                update_cache = LLC_ctr2
-            elif parent_level == TREE_LEVELS - 3:
-                update_cache = LLC_ctr1
-            else:
-                update_cache = LLC_ctr0
-            signature = global_shct.get_signature(pc)
-            if global_shct.prefetch_state[signature] == 1:
-                if global_shct.stride[signature] < 2:
-                    update_cache.update_parent_rrpv(parent_address)
+
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global ctr_cache_hits
                 global LLC_ctr_level_hits
@@ -439,12 +444,13 @@ class MemoryAccess:
         self.byte = byte
         self._pc = pc
 
-        global previous_address
-        address_diff = (abs(np.int64(address) - np.int64(previous_address))) // (64 * 8)
+
         signature = global_shct.get_signature(self._pc)
+        previous_address = global_shct.previous_address[signature]
+        address_diff = (abs(np.int64(address) - np.int64(previous_address))) // (64 * 8)
         global_shct.compare_stride(signature, address_diff)
         global_shct.store_address(signature, address_diff, address)
-
+        prefetch(address, pc)
         previous_address = address
         global cache_hit
         if access_type == "read":

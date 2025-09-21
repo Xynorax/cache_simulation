@@ -402,7 +402,8 @@ class Cache:
             victim_info = (victim_address)
         if victim.valid:
             l1_victim = (victim_address)
-        print("Evicted:", victim_address)
+        if victim.valid:
+            print("Evicted:", victim_address)
         print("Inserted:", (address >> 6) << 6)
         # Replace victim
         victim.modified = 0
