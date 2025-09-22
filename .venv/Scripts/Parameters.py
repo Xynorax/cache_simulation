@@ -177,3 +177,33 @@ class SHCT:
 
 
 global_shct = SHCT()
+
+
+def find_parent_node(nodeAddr):
+    tree_level_address = [0] * TREE_LEVELS
+    print(f"Find the parent of {nodeAddr}")
+    tree_index = int((nodeAddr - TREE_START_ADDRESS) // TREE_SIZE)
+    if tree_index < 0:
+        tree_index = int((nodeAddr - MEMORY_START_ADDR) // IND_TREE_SIZE)
+        node_index = (nodeAddr - tree_index * (NUM_DATA_BLOCKS)) // (block_size)
+        TreeNodeOffset = node_index * TREE_DATA_SIZE
+        TreeNodeNegativeOffset = TREE_DATA_SIZE * DATA_MEM_SIZE / (TREE_ROOTS * block_size)
+        treeNodeAddr = int(
+            (TREE_START_ADDRESS + (tree_index + 1) * TREE_SIZE) - TreeNodeNegativeOffset + TreeNodeOffset)
+        if treeNodeAddr >> 33 & 1 == 0:
+            None
+        return treeNodeAddr, (TREE_LEVELS - 1)
+    tree_level_address[0] = tree_start_addresses[tree_index]
+    i_treeNodeAddr = 6
+    for i in range(1, TREE_LEVELS):
+        tree_level_address[i] = tree_level_address[i - 1] + (TREE_DATA_SIZE << (TREE_ARITY_BITS * i))
+        if tree_level_address[i] > nodeAddr:
+            i_treeNodeAddr = i
+            print(f"i_treeNodeAddr = {nodeAddr}")
+            break
+
+    node_index = (nodeAddr - tree_level_address[i_treeNodeAddr]) // TREE_DATA_SIZE
+    node_index = int(node_index) >> TREE_ARITY_BITS
+    TreeNodeOffset = node_index * TREE_DATA_SIZE
+    parent_node_addr = int(tree_level_address[i_treeNodeAddr - 1] + TreeNodeOffset)
+    return parent_node_addr, (i_treeNodeAddr - 1)

@@ -5,7 +5,7 @@ import Parameters
 import tensorflow as tf
 import util
 from NN_replacementv2 import build_state, rl, TREE_LEVELS
-from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct
+from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct, TREE_ARITY
 from line import Line
 
 
@@ -135,6 +135,7 @@ class Cache:
         tag = self._get_tag(address)  # Tag of cache line
         set = self._get_set(address)  # Set of cache lines
         line = None
+        to_update_children_counter = None
         way_index = -1
         # Search for cache line within set
         for candidate in set:
@@ -164,6 +165,8 @@ class Cache:
                             if line.r == 0:
                                 global_shct.increment_counter(line.signature)
                                 line.r = 1
+                        offset = (address & 0b111111) // TREE_ARITY
+
                         line.rrpv = 0
             elif self._replace_pol == "RL":
                 if line.hits < 1000:
@@ -254,8 +257,10 @@ class Cache:
                             item.rrpv += 1
                 victim = possible_victims[0]
                 for possible_victim in possible_victims:
-                    if possible_victim.level > victim.level:
+                    if possible_victim.children < victim.children:
                         victim = possible_victim
+                victim.children = 0
+                victim.r_children = 0
             incoming_signature = global_shct.get_signature(pc)
             if lazy_update:
                 if Parameters.randomness > 64:
@@ -667,4 +672,15 @@ class Cache:
         for candidate in set:
             if candidate.tag == tag and candidate.valid:
                 candidate.valid = 0
+                break
+
+    def update_children_counter(self, address, value):
+        tag = self._get_tag(address)  # Tag of cache line
+        set = self._get_set(address)  # Set of cache lines
+        line = None
+        # Search for cache line within set
+        for candidate in set:
+            if candidate.tag == tag and candidate.valid:
+                candidate.children += value
+                print("Children Value ", candidate.children)
                 break

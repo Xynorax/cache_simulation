@@ -7,35 +7,20 @@ from cache import Cache
 from translation import *
 
 
-def find_parent_node(nodeAddr):
-    tree_level_address = [0] * TREE_LEVELS
-    print(f"Find the parent of {nodeAddr}")
-    tree_index = int((nodeAddr - TREE_START_ADDRESS) // TREE_SIZE)
-    if tree_index < 0:
-        tree_index = int((nodeAddr - MEMORY_START_ADDR) // IND_TREE_SIZE)
-        node_index = (nodeAddr - tree_index * (NUM_DATA_BLOCKS)) // (block_size)
-        TreeNodeOffset = node_index * TREE_DATA_SIZE
-        TreeNodeNegativeOffset = TREE_DATA_SIZE * DATA_MEM_SIZE / (TREE_ROOTS * block_size)
-        treeNodeAddr = int(
-            (TREE_START_ADDRESS + (tree_index + 1) * TREE_SIZE) - TreeNodeNegativeOffset + TreeNodeOffset)
-        if treeNodeAddr >> 33 & 1 == 0:
-            None
-        return treeNodeAddr, (TREE_LEVELS - 1)
-    tree_level_address[0] = tree_start_addresses[tree_index]
-    i_treeNodeAddr = 6
-    for i in range(1, TREE_LEVELS):
-        tree_level_address[i] = tree_level_address[i - 1] + (TREE_DATA_SIZE << (TREE_ARITY_BITS * i))
-        if tree_level_address[i] > nodeAddr:
-            i_treeNodeAddr = i
-            print(f"i_treeNodeAddr = {nodeAddr}")
-            break
+def update_children_counter(address, value):
+    if address == None:
+        return
+    parent_address, level = find_parent_node(address)
+    if level == TREE_LEVELS - 1:
+        update_cache = LLC_ctr3
+    elif level == TREE_LEVELS - 2:
+        update_cache = LLC_ctr2
+    elif level == TREE_LEVELS - 3:
+        update_cache = LLC_ctr1
+    else:
+        update_cache = LLC_ctr0
 
-    node_index = (nodeAddr - tree_level_address[i_treeNodeAddr]) // TREE_DATA_SIZE
-    node_index = int(node_index) >> TREE_ARITY_BITS
-    TreeNodeOffset = node_index * TREE_DATA_SIZE
-    parent_node_addr = int(tree_level_address[i_treeNodeAddr - 1] + TreeNodeOffset)
-    return parent_node_addr, (i_treeNodeAddr - 1)
-
+    update_cache.update_children_counter(parent_address, value)
 
 def lazy_update(node_address, pc):
     if lazy_update_active == True:
@@ -64,9 +49,12 @@ def lazy_update(node_address, pc):
             update_cache.write(parent_address, byte, pc, level=level)
             hit = True
         else:
-            # victim_address, non_modified_victim = update_cache.load(parent_address, data=bytearray(8), pc=pc,
-            # level=level, lazy_update=1)
-            # update_cache.write(parent_address, byte, pc, level=level)
+            victim_address, non_modified_victim = update_cache.load(parent_address, data=bytearray(8), pc=pc,
+                                                                    level=level, lazy_update=1)
+            update_children_counter(parent_address, +1)
+            if non_modified_victim != None:
+                update_children_counter(non_modified_victim, -1)
+            update_cache.write(parent_address, byte, pc, level=level)
             print("")
         if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
             if hit == True:
@@ -100,7 +88,9 @@ def promotion(address, cache, pc, level=TREE_LEVELS, modified=False):
         cache.write(address, block, pc, level=level)
     else:
         victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
-
+    update_children_counter(address, +1)
+    if non_modified_victim != None:
+        update_children_counter(non_modified_victim, -1)
     if victim_address != None:
         lazy_update(victim_address, pc)
 
@@ -149,6 +139,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
         block = bytearray(8)
         if cache._type == "level1":
             victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
+
             if non_modified_victim != None:
                 modified = False
                 if victim_address == non_modified_victim:
@@ -171,13 +162,16 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
             return 0
         elif cache._type == "data_cache":
             victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
+            update_children_counter(address, +1)
+            if non_modified_victim != None:
+                update_children_counter(non_modified_victim, -1)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global misses
                 misses += 1
                 if level < TREE_LEVELS:
                     level_misses[level] += 1
         elif cache._type == "ctr_cache":
-            load = True
+            load = False
             if level == 0 and Parameters.randomness > RANDOMNESS_MAX_VALUE - 10:
                 load = True
             elif level == 1 and Parameters.randomness > RANDOMNESS_MAX_VALUE - 10:
@@ -201,7 +195,9 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
 
             if load == True:
                 victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
-
+                update_children_counter(address, +1)
+                if non_modified_victim != None:
+                    update_children_counter(non_modified_victim, -1)
             if victim_address != None:
                 set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
                 set_num = (address >> cache._set_shift) & set_mask
@@ -252,6 +248,7 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS, from_l1=False):
             cache_block = LLC.read(address, pc, level=level)
             if cache_block:
                 LLC.invalidate_line(address)
+                update_children_counter(address, -1)
             if Parameters.instructions_number > WARMUP_INSTRUCTIONS:
                 global l1_hits
                 l1_hits += 1
@@ -325,11 +322,16 @@ def write(address, byte, memory, cache, pc, level=TREE_LEVELS, from_l1=False):
             if cache._type == "data_cache":
                 victim_address, non_modified_victim = cache.load(address, block, pc, level=level, WB_insertion=1)
                 cache.write(address, byte, pc, level)
-
+                update_children_counter(address, +1)
+                if non_modified_victim != None:
+                    update_children_counter(non_modified_victim, -1)
                 if victim_address != None:
                     lazy_update(victim_address, pc)
             elif cache._type == "ctr_cache":
                 victim_address, non_modified_victim = cache.load(address, block, pc, level=level, WB_insertion=1)
+                update_children_counter(address, +1)
+                if non_modified_victim != None:
+                    update_children_counter(non_modified_victim, -1)
                 cache.write(address, byte, pc, level)
                 set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
                 set_num = (address >> cache._set_shift) & set_mask
