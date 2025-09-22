@@ -6,7 +6,7 @@ import reward_tracker
 import tensorflow as tf
 import util
 from NN_replacement import NNReplacementPolicy, build_state
-from Parameters import smart_set_indexing, randomness, randomness_num_entries, TREE_LEVELS
+from Parameters import smart_set_indexing, TREE_LEVELS, global_shct
 from line import Line
 
 
@@ -267,26 +267,25 @@ class Cache:
             if self._replace_pol == Cache.FIFO:
                 self._update_use(victim, set)
         elif self._replace_pol == Cache.modified_LRU:
-            signature = ((pc << 1) + 1) & 0xFFFF  # 14-bit mask
-            index = signature % randomness_num_entries
-            randomness[index]
+            signature = global_shct.get_signature(pc)
             victim = set[0]
             victim = self._find_victim(set)
-            victim.use = min(line.use for line in set) - 1
+            victim.use = min(line.use for line in set)
+            stride = global_shct.stride[signature]
             for line in set:
-                if randomness[index] > 40:
-                    if line.level > level and victim.use < line.use:
-                        victim.use = line.use + 1
-                elif randomness[index] <= 40 and randomness[index] >= 19:
-                    if (line.level !=
-                        4 or line.level != 5) and victim.use < line.use:
-                        victim.use = line.use + 1
-                elif randomness[index] > 9 and randomness[index] <= 18:
-                    if line.level != 6 and victim.use < line.use:
-                        victim.use = line.use + 1
-                elif randomness[index] < 10:
-                    if line.level < level and victim.use < line.use:
-                        victim.use = line.use + 1
+                if global_shct.prefetch_state[signature] != -1:
+                    if stride > 64:
+                        if line.level > level and victim.use < line.use:
+                            victim.use = line.use + 1
+                    elif stride <= 64 and stride >= 9:
+                        if line.level < level and victim.use < line.use and 3 > level:
+                            victim.use = line.use + 1
+                    elif stride > 0 and stride <= 8:
+                        if line.level < level and victim.use < line.use and 4 > level:
+                            victim.use = line.use + 1
+                    elif stride < 1:
+                        if line.level < level and victim.use < line.use:
+                            victim.use = line.use + 1
 
 
         elif self._replace_pol == Cache.RAND:

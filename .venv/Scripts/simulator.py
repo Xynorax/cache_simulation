@@ -416,14 +416,12 @@ class MemoryAccess:
         self.byte = byte
         self._pc = pc
 
-        global previous_address
-        address_diff = abs(np.int64(address) - np.int64(previous_address))
-        if address_diff > (TREE_ARITY ** 1) * block_size and Parameters.randomness <= RANDOMNESS_MAX_VALUE:
-            Parameters.randomness += 1
-        else:
-            Parameters.randomness = 0
+        signature = global_shct.get_signature(self._pc)
+        previous_address = global_shct.previous_address[signature]
+        address_diff = (abs(np.int64(address) - np.int64(previous_address))) // (64 * 8)
+        global_shct.compare_stride(signature, address_diff)
+        global_shct.store_address(signature, address_diff, address)
 
-        previous_address = address
         global cache_hit
         if access_type == "read":
             initiate_command(f"read {address}", False, self._pc)
@@ -646,7 +644,7 @@ for k in range(len(simulations)):
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
     LLC_ctr = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                    2 ** 5, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                    2 ** 3, replace_pol="modified_LRU", write_pol=simulations[k][5], type="ctr_cache")
 
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")
