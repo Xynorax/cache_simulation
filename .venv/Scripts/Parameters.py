@@ -63,6 +63,7 @@ lazy_updated = False
 lazy_update_active = True
 lazy_update_misses = 0
 total_evictions = 0
+write_to_log = False
 ###Randomness calculator variables###
 previous_address = 0
 randomness_num_entries = 65536
@@ -129,7 +130,9 @@ class SHCT:
         self.hits = 0
         self.evictions = 0
         self.updates = 0
-
+        # Level counters
+        self.max_level_counter = 15
+        self.level_counters = [0] * (TREE_LEVELS + 1)
         # Prefetch
         self.stride = [0] * num_entries
         self.previous_address = [0] * num_entries
@@ -167,31 +170,35 @@ class SHCT:
 
         return signature
 
-    def increment_counter(self, signature):
+    def increment_counter(self, signature, level):
         """
         Increment counter for a signature (on cache hit)
 
         Args:
             signature: 14-bit signature
         """
+        if self.level_counters[level] < self.max_level_counter:
+            self.level_counters[level] += 1
         index = signature % self.num_entries
         if self.counters[index] < self.max_counter:
             self.counters[index] += 1
 
-    def decrement_counter(self, signature):
+    def decrement_counter(self, signature, level):
         """
         Decrement counter for a signature (on eviction without reuse)
 
         Args:
             signature: 14-bit signature
         """
+        if self.level_counters[level] < self.max_level_counter:
+            self.level_counters[level] -= 1
         index = signature % self.num_entries
         if self.counters[index] > self.min_counter:
             self.counters[index] -= 1
 
-    def get_counter(self, signature):
+    def get_counter(self, signature, level):
         index = signature % self.num_entries
-        return self.counters[index]
+        return self.counters[index], self.level_counters[level]
 
 
 class tree_table:
@@ -270,3 +277,65 @@ def find_parent_node(nodeAddr):
     TreeNodeOffset = node_index * TREE_DATA_SIZE
     parent_node_addr = int(tree_level_address[i_treeNodeAddr - 1] + TreeNodeOffset)
     return parent_node_addr, (i_treeNodeAddr - 1)
+
+
+rereference_log = []
+
+
+class log:
+    def __init__(self):
+        self.rereference_list = []
+
+    def add_event(self, evicted, inserted, way0_address, way1_address, way2_address, way3_address, way4_address,
+                  way5_address, way6_address):
+        event = {
+            "evicted": evicted,
+            "inserted": inserted,
+            "way0": way0_address,
+            "way1": way1_address,
+            "way2": way2_address,
+            "way3": way3_address,
+            "way4": way4_address,
+            "way5": way5_address,
+            "way6": way6_address
+        }
+        self.rereference_list.append(event)
+
+    def resolve(self, address):
+        for event in self.rereference_list:
+            if address == event["way0"]:
+                event["way0"] = -1
+            elif address == event["way1"]:
+                event["way1"] = -1
+            elif address == event["way2"]:
+                event["way2"] = -1
+            elif address == event["way3"]:
+                event["way3"] = -1
+            elif address == event["way4"]:
+                event["way4"] = -1
+            elif address == event["way5"]:
+                event["way5"] = -1
+            elif address == event["way6"]:
+                event["way6"] = -1
+            elif address == event["inserted"]:
+                event["inserted"] = -1
+
+            if address == event["evicted"]:
+                if write_to_log == True:
+                    with open("rereference_log.txt", "a") as file:
+                        file.write(str(instructions_number))
+                        file.write("instruction the Evicted node ")
+                        file.write(str(event["evicted"]))
+                        file.write(" was rereferenced before ")
+                        for key, i in event.items():
+                            if i != -1 and (key.startswith("way") or key == "inserted"):
+                                file.write(str(i))
+                                file.write(" ")
+                        file.write("\n")
+                self.rereference_list.remove(event)
+            elif event["way0"] == -1 and event["way1"] == -1 and event["way2"] == -1 and event["way3"] == -1 and event[
+                "way4"] == -1 and event["way5"] == -1 and event["way6"] == -1 and event["inserted"] == -1:
+                self.rereference_list.remove(event)
+
+
+rr_log = log()

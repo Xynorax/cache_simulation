@@ -5,7 +5,7 @@ import Parameters
 import tensorflow as tf
 import util
 from NN_replacementv2 import build_state, rl, TREE_LEVELS
-from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct
+from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct, rr_log, write_to_log
 from line import Line
 
 
@@ -135,6 +135,8 @@ class Cache:
         tag = self._get_tag(address)  # Tag of cache line
         set = self._get_set(address)  # Set of cache lines
         line = None
+        if ((address >> 6) << 6) == 8592810880:
+            print("Debug")
         way_index = -1
         # Search for cache line within set
         for candidate in set:
@@ -143,6 +145,13 @@ class Cache:
                 line = candidate
                 break
         # Update use bits of cache line
+        if self._replace_pol == "ship_plus":
+            if self._type == "ctr_cache":
+                set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+                set_num = (address >> self._set_shift) & set_mask
+                if set_num == 0b1110001110:
+                    if self._size == 2 ** 19:
+                        rr_log.resolve((address >> 6) << 6)
         if self._replace_pol == "RL":
             rl.resolve((address >> 6) << 6)
         if line:
@@ -157,14 +166,13 @@ class Cache:
                 self._plru_update(set_num, way_index)
             elif (self._replace_pol == Cache.ship_plus):
                 if not lazy_update:
-                    if (level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
-                        set_idx = (address >> self._set_shift) & (
-                                    (self._size // (self._block_size * self._mapping_pol)) - 1)
-                        if set_idx in self.sampled_sets:
-                            if line.r == 0:
-                                global_shct.increment_counter(line.signature)
-                                line.r = 1
-                        line.rrpv = 0
+                    set_idx = (address >> self._set_shift) & (
+                            (self._size // (self._block_size * self._mapping_pol)) - 1)
+                    if set_idx in self.sampled_sets:
+                        if line.r == 0:
+                            global_shct.increment_counter(line.signature, line.level)
+                            line.r = 1
+                    line.rrpv = 0
             elif self._replace_pol == "RL":
                 if line.hits < 1000:
                     line.hits += 1
@@ -188,7 +196,8 @@ class Cache:
         tag = self._get_tag(address)  # Tag of cache line
         set = self._get_set(address)  # Set of cache lines
         victim_info = None
-
+        if ((address >> 6) << 6) == 8592810880:
+            print("Debug")
         # Select the victim
         if (self._replace_pol == Cache.LRU or
                 self._replace_pol == Cache.LFU or
@@ -257,6 +266,7 @@ class Cache:
                     if possible_victim.level > victim.level:
                         victim = possible_victim
             incoming_signature = global_shct.get_signature(pc)
+            pc_counter, level_counter = global_shct.get_counter(incoming_signature, level)
             if lazy_update:
                 if Parameters.randomness > 64:
                     victim.rrpv = 2
@@ -264,23 +274,49 @@ class Cache:
                     victim.rrpv = 3
             elif WB_insertion == 1:
                 victim.rrpv = 0
-            elif global_shct.get_counter(incoming_signature) == 0:
+            elif pc_counter == 0:
                 victim.rrpv = 3
-            elif (global_shct.get_counter(incoming_signature) == global_shct.max_counter):
+            elif pc_counter == global_shct.max_counter:
                 victim.rrpv = 0
             else:
                 victim.rrpv = 2
             set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
             if victim.r == 0 and victim.valid and set_idx in self.sampled_sets:
-                if (level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
-                    global_shct.decrement_counter(victim.signature)
+                global_shct.decrement_counter(victim.signature, victim.level)
             if set_idx in self.sampled_sets:
-                if (level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
-                    victim.r = 0
-                    victim.signature = incoming_signature
-                else:
-                    victim.r = 0
-                    victim.signature = -1
+                victim.r = 0
+                victim.signature = incoming_signature
+
+            if self._type == "ctr_cache":
+                if victim.valid == 1:
+                    way = [0] * (self._mapping_pol - 1)
+                    x = 0
+                    set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+                    set_num = (address >> self._set_shift) & set_mask
+                    for i in range(self._mapping_pol):
+                        if set[i].tag != victim.tag:
+                            way[x] = (set[i].tag << self._tag_shift) + (set_num << self._set_shift)
+                            x += 1
+                    n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
+                    mask = (1 << n) - 1
+                    victim_address = victim.tag << (self._tag_shift) | (
+                            ((address >> self._set_shift) & mask) << self._set_shift)
+                    if (victim_address) == 8592810880:
+                        print("Debug")
+                    if set_num == 0b1110001110:
+                        if self._size == 2 ** 19:
+                            if victim_address == 8592614272:
+                                print("Debug")
+                            if write_to_log == True:
+                                with open("rereference_log.txt", "a") as file:
+                                    file.write("Evicted:")
+                                    file.write(str(victim_address))
+                                    file.write("\n")
+                                    file.write("Inserted:")
+                                    file.write(str((address >> 6) << 6))
+                                    file.write("\n")
+                            rr_log.add_event(victim_address, ((address >> 6) << 6), way[0], way[1],
+                                             way[2], way[3], way[4], way[5], way[6])
 
 
         elif self._replace_pol == "pseudo_LRU":
@@ -426,6 +462,8 @@ class Cache:
         set = self._get_set(address)  # Set of cache lines
         line = None
         way_index = -1
+        if ((address >> 6) << 6) == 8592810880:
+            print("Debug")
         # Search for cache line within set
         for candidate in set:
             way_index += 1
@@ -433,6 +471,13 @@ class Cache:
                 line = candidate
                 break
 
+        if self._replace_pol == "ship_plus":
+            if self._type == "ctr_cache":
+                set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+                set_num = (address >> self._set_shift) & set_mask
+                if set_num == 0b1110001110:
+                    if self._size == 2 ** 19:
+                        rr_log.resolve((address >> 6) << 6)
         # Update data of cache line
         if line:
             # line.data[self.get_offset(address)] = byte
@@ -442,6 +487,7 @@ class Cache:
                     self._replace_pol == Cache.LFU or
                     self._replace_pol == Cache.modified_LRU):
                 self._update_use(line, set, level)
+
             elif (self._replace_pol == Cache.RLR):
                 self._update_rlr(line, set)
             elif (self._replace_pol == "pseudo_LRU"):
@@ -678,3 +724,14 @@ class Cache:
             if candidate.tag == tag and candidate.valid:
                 candidate.rrpv = 0
                 break
+
+    def check_children(self, parent_address):
+        # Set of cache lines
+        for i in range(8):
+            address = ((parent_address - 8592331328) * 8) + 64 * i
+            tag = self._get_tag(address)  # Tag of cache line
+            set = self._get_set(address)
+            for candidate in set:
+                if candidate.tag == tag and candidate.valid:
+                    print(f"Child", i, "found!")
+                    break

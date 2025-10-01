@@ -204,7 +204,26 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
 
             if load == True:
                 victim_address, non_modified_victim = cache.load(address, block, pc, level=level)
-
+                if non_modified_victim == 8592614272:
+                    LLC.check_children(8592614272)
+                    LLC.check_children(8599036800)
+                    LLC.check_children(8597660544)
+                    LLC.check_children(8592876416)
+                    LLC.check_children(8593793920)
+                    LLC.check_children(8597988224)
+                    LLC.check_children(8594318208)
+                    LLC.check_children(8593007488)
+                    LLC.check_children(8598381440)
+                if non_modified_victim == 8592614272:
+                    l1cache.check_children(8592614272)
+                    l1cache.check_children(8599036800)
+                    l1cache.check_children(8597660544)
+                    l1cache.check_children(8592876416)
+                    l1cache.check_children(8593793920)
+                    l1cache.check_children(8597988224)
+                    l1cache.check_children(8594318208)
+                    l1cache.check_children(8593007488)
+                    l1cache.check_children(8598381440)
             if victim_address != None:
                 set_mask = (cache._size // (cache._block_size * cache._mapping_pol)) - 1
                 set_num = (address >> cache._set_shift) & set_mask
@@ -450,7 +469,6 @@ class MemoryAccess:
         address_diff = (abs(np.int64(address) - np.int64(previous_address))) // (64 * 8)
         global_shct.compare_stride(signature, address_diff)
         global_shct.store_address(signature, address_diff, address)
-        prefetch(address, pc)
         previous_address = address
         global cache_hit
         if access_type == "read":
