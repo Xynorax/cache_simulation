@@ -339,3 +339,137 @@ class log:
 
 
 rr_log = log()
+
+
+class HHT():
+    def __init__(self):
+        self.num_entries = 1000
+        self.entries = {i: [None, None, None, None, 0] for i in range(2 ** (32 - 17 - 1))}
+
+    def get_expected_hit_counter(self, address):
+        tag = address >> 17
+        expected_hit_counter = 0
+        # Check valid bit
+        if self.entries[tag][4]:
+            for i in range(4):
+                expected_hit_counter += self.entries[tag][i]
+            return (expected_hit_counter // 4), 1  # Return the average of the four most recent
+        else:
+            return 0, 0
+
+    def store_expected_hit_counter(self, address, hit_counter):
+        tag = address >> 17
+        self.entries[tag].pop(3)
+        self.entries[tag].insert(0, hit_counter)
+        for i in range(4):
+            if self.entries[tag][i] == None:
+                return
+        self.entries[tag][4] = 1
+
+
+hht = HHT()
+
+
+class SHCT:
+    """
+    Signature History Counter Table implementation
+    Based on the SHiP++ cache replacement policy
+    """
+
+    def __init__(self, num_entries=65536, counter_bits=3):
+        """
+        Initialize SHCT
+
+        Args:
+            num_entries: Number of entries in the table (default: 16K)
+            counter_bits: Number of bits per counter (default: 3-bit)
+        """
+        self.num_entries = num_entries
+        self.counter_bits = counter_bits
+        self.max_counter = (1 << counter_bits) - 1  # 2^3 - 1 = 7
+        self.min_counter = 0
+
+        # Initialize all counters to 0
+        self.counters = [0] * num_entries
+
+        # Statistics
+        self.hits = 0
+        self.evictions = 0
+        self.updates = 0
+        # Level counters
+        self.max_level_counter = 15
+        self.level_counters = [0] * (TREE_LEVELS + 1)
+        # Prefetch
+        self.stride = [0] * num_entries
+        self.previous_address = [0] * num_entries
+        self.prefetch_state = [0] * num_entries  # 0 for transient, 1 for steady. Steady state means stride is constant
+
+    def compare_stride(self, signature, address_diff):
+        current_stride = self.stride[signature]
+        if address_diff == current_stride:
+            self.prefetch_state[signature] = 1
+            return current_stride
+        else:
+            self.prefetch_state[signature] = -1
+            return -1
+
+    def store_address(self, signature, address_diff, address):
+        self.stride[signature] = address_diff
+        self.previous_address[signature] = address
+
+    def get_signature(self, pc, is_prefetch=False):
+        """
+        Calculate signature from PC
+
+        Args:
+            pc: Program Counter
+            is_prefetch: Whether this is a prefetch access
+
+        Returns:
+            14-bit signature
+        """
+        if is_prefetch:
+            # SHiP++ enhancement: separate signatures for prefetch
+            signature = ((pc << 1) + 1) & 0xFFFF  # 14-bit mask
+        else:
+            signature = (pc << 1) & 0xFFFF  # 14-bit mask
+
+        return signature
+
+    def increment_counter(self, signature, level):
+        """
+        Increment counter for a signature (on cache hit)
+
+        Args:
+            signature: 14-bit signature
+        """
+        if self.level_counters[level] < self.max_level_counter:
+            self.level_counters[level] += 1
+        index = signature % self.num_entries
+        if self.counters[index] < self.max_counter:
+            self.counters[index] += 1
+
+    def decrement_counter(self, signature, level):
+        """
+        Decrement counter for a signature (on eviction without reuse)
+
+        Args:
+            signature: 14-bit signature
+        """
+        if self.level_counters[level] < self.max_level_counter:
+            self.level_counters[level] -= 1
+        index = signature % self.num_entries
+        if self.counters[index] > self.min_counter:
+            self.counters[index] -= 1
+
+    def get_counter(self, signature, level):
+        index = signature % self.num_entries
+        return self.counters[index], self.level_counters[level]
+
+
+global_shct = SHCT()
+
+
+def get_children_address(parent_address):
+    address = ((parent_address - 8592331328) * 8) + 64
+    return address

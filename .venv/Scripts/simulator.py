@@ -464,12 +464,6 @@ class MemoryAccess:
         self._pc = pc
 
 
-        signature = global_shct.get_signature(self._pc)
-        previous_address = global_shct.previous_address[signature]
-        address_diff = (abs(np.int64(address) - np.int64(previous_address))) // (64 * 8)
-        global_shct.compare_stride(signature, address_diff)
-        global_shct.store_address(signature, address_diff, address)
-        previous_address = address
         global cache_hit
         if access_type == "read":
             initiate_command(f"read {address}", False, self._pc)

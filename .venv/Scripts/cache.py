@@ -5,7 +5,7 @@ import Parameters
 import tensorflow as tf
 import util
 from NN_replacementv2 import build_state, rl, TREE_LEVELS
-from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct, rr_log, write_to_log
+from Parameters import smart_set_indexing, randomness, randomness_num_entries, hht, global_shct, get_children_address
 from line import Line
 
 
@@ -149,12 +149,16 @@ class Cache:
             if self._type == "ctr_cache":
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
-                if set_num == 0b1110001110:
-                    if self._size == 2 ** 19:
-                        rr_log.resolve((address >> 6) << 6)
+                # if set_num == 0b1110001110:
+                #   if self._size == 2 ** 19:
+                # rr_log.resolve((address >> 6) << 6)
         if self._replace_pol == "RL":
             rl.resolve((address >> 6) << 6)
         if line:
+            if line.current_hit_counter < 7:
+                line.current_hit_counter += 1
+            if line.expected_hit_counter > 0 and line.expected_hit_counter_valid:
+                line.expected_hit_counter -= 1
             if (self._replace_pol == Cache.LRU or
                     self._replace_pol == Cache.LFU or self._replace_pol == Cache.modified_LRU):
                 self._update_use(line, set, level)
@@ -262,9 +266,27 @@ class Cache:
                         for item in set:
                             item.rrpv += 1
                 victim = possible_victims[0]
-                for possible_victim in possible_victims:
-                    if possible_victim.level > victim.level:
-                        victim = possible_victim
+                if self._type == "ctr_cache" and level == 6:
+                    n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
+                    mask = (1 << n) - 1
+                    victim_address = victim.tag << (self._tag_shift) | (
+                            ((address >> self._set_shift) & mask) << self._set_shift)
+
+                    children_address = get_children_address(victim_address)
+                    victim_expected_hit_counter, valid = hht.get_expected_hit_counter(children_address)
+                    for possible_victim in possible_victims:
+                        n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
+                        mask = (1 << n) - 1
+                        victim_address = possible_victim.tag << (self._tag_shift) | (
+                                ((address >> self._set_shift) & mask) << self._set_shift)
+
+                        children_address = get_children_address(victim_address)
+                        expected_hit_counter, valid = hht.get_expected_hit_counter(children_address)
+                        if expected_hit_counter > victim_expected_hit_counter and valid == 1:
+                            victim_expected_hit_counter = expected_hit_counter
+                            victim = possible_victim
+
+
             incoming_signature = global_shct.get_signature(pc)
             pc_counter, level_counter = global_shct.get_counter(incoming_signature, level)
             if lazy_update:
@@ -303,7 +325,7 @@ class Cache:
                             ((address >> self._set_shift) & mask) << self._set_shift)
                     if (victim_address) == 8592810880:
                         print("Debug")
-                    if set_num == 0b1110001110:
+                    """if set_num == 0b1110001110:
                         if self._size == 2 ** 19:
                             if victim_address == 8592614272:
                                 print("Debug")
@@ -316,7 +338,7 @@ class Cache:
                                     file.write(str((address >> 6) << 6))
                                     file.write("\n")
                             rr_log.add_event(victim_address, ((address >> 6) << 6), way[0], way[1],
-                                             way[2], way[3], way[4], way[5], way[6])
+                                             way[2], way[3], way[4], way[5], way[6])"""
 
 
         elif self._replace_pol == "pseudo_LRU":
@@ -386,9 +408,14 @@ class Cache:
             l1_victim = None
             if victim.modified and victim.valid:
                 victim_info = (evicted_line_addr)
-            elif victim.valid:
+            if victim.valid:
                 l1_victim = (evicted_line_addr)
 
+            if self._type == "data_cache":
+                if victim.valid:
+                    hht.store_expected_hit_counter(evicted_line_addr, victim.current_hit_counter)
+                victim.expected_hit_counter, victim.expected_hit_counter_valid = hht.get_expected_hit_counter(address)
+                victim.current_hit_counter = 0
             victim.modified = 0
             victim.valid = 1
             victim.tag = tag
@@ -475,9 +502,9 @@ class Cache:
             if self._type == "ctr_cache":
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
-                if set_num == 0b1110001110:
-                    if self._size == 2 ** 19:
-                        rr_log.resolve((address >> 6) << 6)
+                # if set_num == 0b1110001110:
+                #   if self._size == 2 ** 19:
+                #      rr_log.resolve((address >> 6) << 6)
         # Update data of cache line
         if line:
             # line.data[self.get_offset(address)] = byte
