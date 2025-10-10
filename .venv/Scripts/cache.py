@@ -5,7 +5,7 @@ import Parameters
 import tensorflow as tf
 import util
 from NN_replacementv2 import build_state, rl, TREE_LEVELS
-from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct, rr_log, write_to_log
+from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct, write_to_log, hht
 from line import Line
 
 
@@ -149,12 +149,14 @@ class Cache:
             if self._type == "ctr_cache":
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
-                if set_num == 0b1110001110:
-                    if self._size == 2 ** 19:
-                        rr_log.resolve((address >> 6) << 6)
+                # if set_num == 0b1110001110:
+                #    if self._size == 2 ** 19:
+                #        rr_log.resolve((address >> 6) << 6)
         if self._replace_pol == "RL":
             rl.resolve((address >> 6) << 6)
         if line:
+            if line.current_hit_counter < 7:
+                line.current_hit_counter += 1
             if (self._replace_pol == Cache.LRU or
                     self._replace_pol == Cache.LFU or self._replace_pol == Cache.modified_LRU):
                 self._update_use(line, set, level)
@@ -233,6 +235,24 @@ class Cache:
         elif self._replace_pol == Cache.RAND:
             index = random.randint(0, self._mapping_pol - 1)
             victim = set[index]
+        elif self._replace_pol == "expected_hits":
+            victim = None
+            for index in range(len(set)):  # Check if a line in the set is free
+                if set[index].valid == 0:
+                    victim = set[index]
+            if not victim:
+                victim = set[0]
+                for line in set:
+                    if line.expected_hit_counter > victim.expected_hit_counter and line.expected_hit_counter_valid:
+                        victim = line
+            if victim.valid:
+                n = int(log(self._size // (self._mapping_pol * self._block_size), 2))  # number of bits
+                mask = (1 << n) - 1
+                evicted_line_addr = victim.tag << (self._tag_shift) | (
+                        ((address >> self._set_shift) & mask) << self._set_shift)
+                hht.store_expected_hit_counter(evicted_line_addr, victim.current_hit_counter)
+            victim.expected_hit_counter, victim.expected_hit_counter_valid = hht.get_expected_hit_counter(address)
+            victim.current_hit_counter = 0
 
         elif self._replace_pol == Cache.ship_plus:
             victim = None
@@ -315,8 +335,8 @@ class Cache:
                                     file.write("Inserted:")
                                     file.write(str((address >> 6) << 6))
                                     file.write("\n")
-                            rr_log.add_event(victim_address, ((address >> 6) << 6), way[0], way[1],
-                                             way[2], way[3], way[4], way[5], way[6])
+                            # rr_log.add_event(victim_address, ((address >> 6) << 6), way[0], way[1],
+                            #                way[2], way[3], way[4], way[5], way[6])
 
 
         elif self._replace_pol == "pseudo_LRU":
@@ -475,9 +495,9 @@ class Cache:
             if self._type == "ctr_cache":
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
-                if set_num == 0b1110001110:
-                    if self._size == 2 ** 19:
-                        rr_log.resolve((address >> 6) << 6)
+                # if set_num == 0b1110001110:
+                #    if self._size == 2 ** 19:
+                #        rr_log.resolve((address >> 6) << 6)
         # Update data of cache line
         if line:
             # line.data[self.get_offset(address)] = byte

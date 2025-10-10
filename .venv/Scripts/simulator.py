@@ -700,16 +700,16 @@ for k in range(len(simulations)):
     # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
     LLC_ctr3 = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                     2 ** 3, replace_pol="expected_hits", write_pol=simulations[k][5], type="ctr_cache")
 
     LLC_ctr2 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                     2 ** 3, replace_pol="expected_hits", write_pol=simulations[k][5], type="ctr_cache")
 
     LLC_ctr1 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                     2 ** 3, replace_pol="expected_hits", write_pol=simulations[k][5], type="ctr_cache")
 
     LLC_ctr0 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                     2 ** 3, replace_pol="expected_hits", write_pol=simulations[k][5], type="ctr_cache")
 
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                     type="level1")

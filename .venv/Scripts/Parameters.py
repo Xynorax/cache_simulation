@@ -11,7 +11,8 @@ block_size = 2 ** BLOCK
 mapping = 2 ** MAPPING
 replace_policy = "LRU"
 write_policy = "WB"
-replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus", "modified_LRU", "pseudo_LRU", "RL"]
+replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus", "modified_LRU", "pseudo_LRU", "RL",
+                        "expected_hits"]
 write_policies = ["WB", "WT"]
 ctr_cache_size = 2 ** COUNTERS_CACHE
 
@@ -339,3 +340,32 @@ class log:
 
 
 rr_log = log()
+
+
+class HHT():
+    def __init__(self):
+        self.num_entries = 1000
+        self.entries = {i: [None, None, None, None, 0] for i in range(2 ** (MEMORY - 17))}
+
+    def get_expected_hit_counter(self, address):
+        tag = address >> 17
+        expected_hit_counter = 0
+        # Check valid bit
+        if self.entries[tag][4]:
+            for i in range(4):
+                expected_hit_counter += self.entries[tag][i]
+            return (expected_hit_counter // 4), 1  # Return the average of the four most recent
+        else:
+            return 0, 0
+
+    def store_expected_hit_counter(self, address, hit_counter):
+        tag = address >> 17
+        self.entries[tag].pop(3)
+        self.entries[tag].insert(0, hit_counter)
+        for i in range(4):
+            if self.entries[tag][i] == None:
+                return
+        self.entries[tag][4] = 1
+
+
+hht = HHT()
