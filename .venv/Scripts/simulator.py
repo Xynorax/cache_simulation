@@ -695,7 +695,8 @@ for E in range(rl._episodes):
               " bytes (" + str(cache_size // block_size) + " lines)")
         print("Block size: " + str(block_size) + " bytes")
         print("Mapping policy: " + ("direct" if simulations[k][3] == 1 else mapping_str) + "\n")
-        benchmark_trace(500000)
+        benchmark_trace(5_000_000)
+
         # benchmark_random_reads()
         # benchmark_manual()
         # benchmark_random_reads()
@@ -712,6 +713,10 @@ for E in range(rl._episodes):
             f.write(f"Rewards: {rl.rewards}")
             f.write(f"Cache level hits: {LLC_ctr_level_hits}\n")
             f.write(f"Cache level misses: {LLC_ctr_level_misses}\n")
+
+    if rl.evaluation_mode:
+        break
+    else:
         importlib.reload(Parameters)
 
 

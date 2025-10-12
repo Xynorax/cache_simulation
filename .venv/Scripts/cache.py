@@ -165,11 +165,11 @@ class Cache:
                         line.r = 1
                 line.rrpv = 0
             elif self._replace_pol == "RL":
-                if line.hits < 1000:
+                if line.hits < 200:
                     line.hits += 1
                 line.preuse_distance = line.age_counter
                 for index in range(len(set)):
-                    if set[index].age_counter < 3000:
+                    if set[index].age_counter < 50:
                         set[index].age_counter += 1
                 line.age_counter = 0
 

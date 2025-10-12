@@ -1,4 +1,5 @@
 import os
+import random
 import time
 from collections import deque
 
@@ -7,10 +8,11 @@ import numpy as np
 from Parameters import TREE_LEVELS, RANDOMNESS_MAX_VALUE
 from tensorflow import keras
 
+os.environ["XLA_FLAGS"] = "--xla_gpu_cuda_data_dir=/usr/lib/cuda"
 
 class rl_agent:
     # --- Hyperparameters ---
-    def __init__(self, gamma=0.95, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.999, batch_size=1024, episodes=50):
+    def __init__(self, gamma=0.95, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.999, batch_size=2048, episodes=50):
         self.evaluation_mode = False
         self._gamma = gamma  # discount factor
         self._epsilon = epsilon  # exploration rate
@@ -22,11 +24,11 @@ class rl_agent:
         self.steps = 0
         self.rewards = 0
         # --- Replay buffer ---
-        self.memory = deque(maxlen=4096)
+        self.memory = deque(maxlen=30000)
         # --- Neural network ---
         self._state_dim = 56
-        self._layer1_dim = 128
-        self._hidden_dim = 64
+        self._layer1_dim = 64
+        self._hidden_dim = 32
         self._assoc = 4
         self.model = self.build_nn()
         self.target_model = self.build_nn()
@@ -39,13 +41,14 @@ class rl_agent:
             print("No saved weights found, starting fresh.")
         # --- Reward Tracker ---
         self.pending_events = []
-        self.timeout = 100_000
+        self.timeout = 500_000
 
     def build_nn(self):
         # --- Q-Network ---
         model = keras.Sequential([
-            keras.layers.Dense(self._layer1_dim, activation="relu", input_shape=(self._state_dim,)),
-            keras.layers.Dense(self._hidden_dim, activation="relu"),
+            keras.Input(shape=(self._state_dim,)),
+            keras.layers.Dense(self._layer1_dim, activation="tanh"),
+            keras.layers.Dense(self._hidden_dim, activation="tanh"),
             keras.layers.Dense(self._assoc, activation="linear")
         ])
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001),
@@ -89,12 +92,14 @@ class rl_agent:
         if len(self.memory) < self._batch_size or Parameters.instructions_number < 1000_000:
             return
         self.steps += 1
-
-        minibatch = [self.memory.popleft() for _ in range(self._batch_size)]
-        states = np.array([s for s, _, _, _, _ in minibatch])
+        if self.steps % self._batch_size != 0:
+            return
+        # minibatch = [self.memory.popleft() for _ in range(self._batch_size)]
+        minibatch = random.sample(self.memory, self._batch_size)
+        states = np.array([s for s, _, _, _, _ in minibatch], dtype=np.float32)
         actions = np.array([a for _, a, _, _, _ in minibatch])
         rewards = np.array([r for _, _, r, _, _ in minibatch])
-        next_states = np.array([ns for _, _, _, ns, _ in minibatch])
+        next_states = np.array([ns for _, _, _, ns, _ in minibatch], dtype=np.float32)
         dones = np.array([d for _, _, _, _, d in minibatch])
 
         # code you want to time
@@ -107,7 +112,7 @@ class rl_agent:
                 target += self._gamma * np.max(next_q[i])
             target_q[i][actions[i]] = target
 
-        self.model.fit(states, target_q, epochs=1, verbose=0)
+        self.model.train_on_batch(states, target_q)
         if self.steps % self.target_sync == 0:
             self.update_target_model()
 
@@ -129,7 +134,7 @@ class rl_agent:
             "way0": way0,
             "way1": way1,
             "way2": way2,
-            "reward": 3
+            "reward": 5
         }
         self.pending_events.append(event)
 
@@ -144,14 +149,15 @@ class rl_agent:
                 event["way1"] = None
             elif access_addr == event["way2"]:
                 event["way2"] = None
-            elif access_addr == event["inserted"]:
-                event["reward"] += 0.01
+            elif access_addr == event["inserted"] and event["inserted"] != None:
+                event["reward"] += 0.1
                 event["inserted"] = None
 
             if access_addr == event["evicted"]:
-                self.store_transition(event["state"], event["action"], -3, event["next_state"])
+                none_count = sum(1 for v in event.values() if v is None)
+                self.store_transition(event["state"], event["action"], -1, event["next_state"])
                 self.pending_events.remove(event)
-            elif event["way0"] == None and event["way1"] == None and event["way2"] == None and event[
+            if event["way0"] == None and event["way1"] == None and event["way2"] == None and event[
                 "inserted"] == None:
                 self.store_transition(event["state"], event["action"], event["reward"], event["next_state"])
                 self.pending_events.remove(event)
@@ -188,7 +194,7 @@ def build_state(ways_hits, request_address, pc, access_type, access_level, ways_
     categories = list(range(TREE_LEVELS))
 
     for i in range(len(ways_hits)):
-        features.append(normalize(ways_hits[i], 1000))  # 0,1,2,3
+        features.append(normalize(ways_hits[i], 200))  # 0,1,2,3
     features.append(normalize(block_offset, 64))  # 4
     features.append(normalize(set_index, 1024))  # 5
     features.append(normalize(pc & 0xFFFF, 0xFFFF))  # 6
@@ -197,7 +203,7 @@ def build_state(ways_hits, request_address, pc, access_type, access_level, ways_
     for i in range(len(ways_levels)):
         features += (one_hot(ways_levels[i], categories))  # 16,17,18,19,20,21,22, -
     for i in range(len(ways_preuse)):
-        features.append(normalize(ways_preuse[i], 3000))
+        features.append(normalize(ways_preuse[i], 50))
     features += (ways_dirty)
     features += (ways_lazy_updated)
     features.append(normalize(Parameters.randomness, RANDOMNESS_MAX_VALUE))
