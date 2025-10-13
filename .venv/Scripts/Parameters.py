@@ -1,4 +1,6 @@
+import csv
 import math
+
 MEMORY = 34  # MEMORY - size of main memory in 2^N bytes
 CACHE = 20  # CACHE - size of the cache in 2^N bytes
 BLOCK = 6  # BLOCK - size of a block of memory in 2^N bytes
@@ -63,7 +65,7 @@ lazy_updated = False
 lazy_update_active = True
 lazy_update_misses = 0
 total_evictions = 0
-write_to_log = False
+write_to_log = True
 ###Randomness calculator variables###
 previous_address = 0
 randomness_num_entries = 65536
@@ -287,7 +289,7 @@ class log:
         self.rereference_list = []
 
     def add_event(self, evicted, inserted, way0_address, way1_address, way2_address, way3_address, way4_address,
-                  way5_address, way6_address):
+                  way5_address, way6_address, state):
         event = {
             "evicted": evicted,
             "inserted": inserted,
@@ -297,7 +299,8 @@ class log:
             "way3": way3_address,
             "way4": way4_address,
             "way5": way5_address,
-            "way6": way6_address
+            "way6": way6_address,
+            "state": state
         }
         self.rereference_list.append(event)
 
@@ -320,6 +323,7 @@ class log:
             elif address == event["inserted"]:
                 event["inserted"] = -1
 
+            # Bad eviction
             if address == event["evicted"]:
                 if write_to_log == True:
                     with open("rereference_log.txt", "a") as file:
@@ -332,9 +336,21 @@ class log:
                                 file.write(str(i))
                                 file.write(" ")
                         file.write("\n")
+                        with open("log.csv", "a", newline="") as file:
+                            writer = csv.writer(file)
+                            state = event["state"]
+                            state[0] = 0
+                            writer.writerow(state)
                 self.rereference_list.remove(event)
-            elif event["way0"] == -1 and event["way1"] == -1 and event["way2"] == -1 and event["way3"] == -1 and event[
+            # Good eviction
+            if event["way0"] == -1 and event["way1"] == -1 and event["way2"] == -1 and event["way3"] == -1 and event[
                 "way4"] == -1 and event["way5"] == -1 and event["way6"] == -1 and event["inserted"] == -1:
+                if write_to_log:
+                    with open("log.csv", "a", newline="") as file:
+                        writer = csv.writer(file)
+                        state = event["state"]
+                        state[0] = 1
+                        writer.writerow(state)
                 self.rereference_list.remove(event)
 
 

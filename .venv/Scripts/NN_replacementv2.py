@@ -4,9 +4,8 @@ from collections import deque
 
 import Parameters
 import numpy as np
-import tensorflow as tf
+# import tensorflow as tf
 from Parameters import TREE_LEVELS, RANDOMNESS_MAX_VALUE
-from tensorflow import keras
 
 
 class rl_agent:
@@ -42,13 +41,13 @@ class rl_agent:
 
     def build_nn(self):
         # --- Q-Network ---
-        model = keras.Sequential([
+        """model = keras.Sequential([
             keras.layers.Dense(self._layer1_dim, activation="relu", input_shape=(self._state_dim,)),
             keras.layers.Dense(self._hidden_dim, activation="relu"),
             keras.layers.Dense(self._assoc, activation="linear")
         ])
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001),
-                      loss='mse')
+                      loss='mse')"""
         return model
 
     def update_target_model(self):
@@ -188,5 +187,5 @@ def build_state(ways_hits, request_address, pc, access_type, access_level, ways_
     return features
 
 
-rl = rl_agent()
+#rl = rl_agent()
 print(tf.config.list_physical_devices('GPU'))

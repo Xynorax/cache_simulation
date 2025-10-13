@@ -1,9 +1,9 @@
-import csv
-
+import Parameters
+import numpy as np
 import util
-from NN_replacementv2 import *
+# from NN_replacementv2 import *
 from Parameters import *
-from cache import Cache
+from cache import Cache, LLC_ctr0, LLC_ctr1, LLC_ctr2, LLC_ctr3, LLC, l1cache
 from translation import *
 
 
@@ -695,24 +695,7 @@ for k in range(len(simulations)):
     # memory = Memory(mem_size, block_size)
     memory = 0
 
-    LLC = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                2 ** 2, simulations[k][4], simulations[k][5], type="data_cache")
-    # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
-    LLC_ctr3 = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
-
-    LLC_ctr2 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
-
-    LLC_ctr1 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
-
-    LLC_ctr0 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                     2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
-
-    l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
-                    type="level1")
     # l1_cache_cc = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",type="level1_cc")
     global cc_set_miss_counter
     cc_set_miss_counter = [0 for _ in range((LLC_ctr3._size // LLC_ctr3._block_size) // LLC_ctr3._mapping_pol)]

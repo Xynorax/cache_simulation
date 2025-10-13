@@ -4,8 +4,9 @@ from math import log
 import Parameters
 import tensorflow as tf
 import util
-from NN_replacementv2 import build_state, rl, TREE_LEVELS
-from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct, rr_log, write_to_log
+# from NN_replacementv2 import build_state, rl, TREE_LEVELS
+from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct, rr_log, TREE_LEVELS, \
+    simulations
 from line import Line
 
 
@@ -146,6 +147,7 @@ class Cache:
                 break
         # Update use bits of cache line
         if self._replace_pol == "ship_plus":
+
             if self._type == "ctr_cache":
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
@@ -166,6 +168,7 @@ class Cache:
                 self._plru_update(set_num, way_index)
             elif (self._replace_pol == Cache.ship_plus):
                 if not lazy_update:
+                    line.hits += 1
                     set_idx = (address >> self._set_shift) & (
                             (self._size // (self._block_size * self._mapping_pol)) - 1)
                     if set_idx in self.sampled_sets:
@@ -254,6 +257,7 @@ class Cache:
                     for item in set:
                         item.rrpv += 1"""
             if victim == None:
+
                 while (not possible_victims):
                     for i in set:
                         if i.rrpv == 7:
@@ -267,6 +271,40 @@ class Cache:
                         victim = possible_victim
             incoming_signature = global_shct.get_signature(pc)
             pc_counter, level_counter = global_shct.get_counter(incoming_signature, level)
+
+            if self._type == "ctr_cache" and self._size == 2 ** 19 and victim.valid:
+                set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
+                set_num = (address >> self._set_shift) & set_mask
+                if set_num == 0b1110001110:
+                    state = [0] * 51
+                    victim_address = victim.tag << (self._tag_shift) | (
+                            ((address >> self._set_shift) & set_mask) << self._set_shift)
+                    children_number, children_hits = self.count_children_in_LLC_and_l1(victim_address)
+                    state[43] = children_hits
+                    state[35] = victim.lazy_updated
+                    state[27] = victim.modified
+                    state[19] = victim.hits
+                    state[11] = children_number
+                    state[3] = victim.rrpv
+                    state[2] = victim_address
+                    state[1] = (address >> 6) << 6
+                    x = 0
+                    for i in range(self._mapping_pol):
+                        if set[i] == victim:
+                            continue
+                        way_address = set[i].tag << (self._tag_shift) | (
+                                ((address >> self._set_shift) & set_mask) << self._set_shift)
+                        children_number, children_hits = self.count_children_in_LLC_and_l1(way_address)
+                        state[x + 44] = children_hits
+                        state[x + 36] = set[i].lazy_updated
+                        state[x + 28] = set[i].modified
+                        state[x + 20] = set[i].hits
+                        state[x + 12] = children_number
+                        state[x + 4] = set[i].rrpv
+
+                        x +=1
+
+
             if lazy_update:
                 if Parameters.randomness > 64:
                     victim.rrpv = 2
@@ -307,16 +345,8 @@ class Cache:
                         if self._size == 2 ** 19:
                             if victim_address == 8592614272:
                                 print("Debug")
-                            if write_to_log == True:
-                                with open("rereference_log.txt", "a") as file:
-                                    file.write("Evicted:")
-                                    file.write(str(victim_address))
-                                    file.write("\n")
-                                    file.write("Inserted:")
-                                    file.write(str((address >> 6) << 6))
-                                    file.write("\n")
                             rr_log.add_event(victim_address, ((address >> 6) << 6), way[0], way[1],
-                                             way[2], way[3], way[4], way[5], way[6])
+                                             way[2], way[3], way[4], way[5], way[6], state)
 
 
         elif self._replace_pol == "pseudo_LRU":
@@ -735,3 +765,53 @@ class Cache:
                 if candidate.tag == tag and candidate.valid:
                     print(f"Child", i, "found!")
                     break
+
+    def count_children_in_LLC_and_l1(self, parent_address):
+        children_number = 0
+        children_hits = 0
+        for i in range(8):
+            child_in_llc = False
+            address = ((
+                                   parent_address - 8592331328) * 8) + 64 * i  # Works only for calculating the children address of level 6
+            llc_tag = LLC._get_tag(address)
+            llc_set = LLC._get_set(address)
+            for candidate in llc_set:
+                if candidate.tag == llc_tag and candidate.valid:
+                    children_number += 1
+                    children_hits += candidate.hits
+                    child_in_llc = True
+                    break
+            if child_in_llc:
+                continue
+            l1cache_tag = l1cache._get_tag(address)
+            l1cache_set = l1cache._get_set(address)
+            for candidate in l1cache_set:
+                if candidate.tag == l1cache_tag and candidate.valid:
+                    children_number += 1
+                    children_hits += candidate.hits
+                    break
+
+        return children_number, children_hits
+
+
+k = 0
+l1_cache_size = (2 ** 15) // 2
+
+LLC = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
+            2 ** 2, simulations[k][4], simulations[k][5], type="data_cache")
+# def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
+
+LLC_ctr3 = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
+                 2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+
+LLC_ctr2 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
+                 2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+
+LLC_ctr1 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
+                 2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+
+LLC_ctr0 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
+                 2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+
+l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
+                type="level1")
