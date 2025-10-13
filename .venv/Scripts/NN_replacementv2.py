@@ -12,7 +12,7 @@ os.environ["XLA_FLAGS"] = "--xla_gpu_cuda_data_dir=/usr/lib/cuda"
 
 class rl_agent:
     # --- Hyperparameters ---
-    def __init__(self, gamma=0.95, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.999, batch_size=2048, episodes=50):
+    def __init__(self, gamma=0.95, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.999, batch_size=1024, episodes=50):
         self.evaluation_mode = False
         self._gamma = gamma  # discount factor
         self._epsilon = epsilon  # exploration rate
@@ -20,8 +20,9 @@ class rl_agent:
         self._epsilon_decay = epsilon_decay
         self._batch_size = batch_size
         self._episodes = episodes
-        self.target_sync = 6000 // self._batch_size
+        self.target_sync = 30 * self._batch_size // self._batch_size
         self.steps = 0
+        self.target_sync_steps = 0
         self.rewards = 0
         # --- Replay buffer ---
         self.memory = deque(maxlen=30000)
@@ -41,7 +42,7 @@ class rl_agent:
             print("No saved weights found, starting fresh.")
         # --- Reward Tracker ---
         self.pending_events = []
-        self.timeout = 500_000
+        self.timeout = 400_000
 
     def build_nn(self):
         # --- Q-Network ---
@@ -92,8 +93,10 @@ class rl_agent:
         if len(self.memory) < self._batch_size or Parameters.instructions_number < 1000_000:
             return
         self.steps += 1
-        if self.steps % self._batch_size != 0:
+        if self.steps < self._batch_size:
             return
+        self.steps = 0
+        self.target_sync_steps += 1
         # minibatch = [self.memory.popleft() for _ in range(self._batch_size)]
         minibatch = random.sample(self.memory, self._batch_size)
         states = np.array([s for s, _, _, _, _ in minibatch], dtype=np.float32)
@@ -103,23 +106,21 @@ class rl_agent:
         dones = np.array([d for _, _, _, _, d in minibatch])
 
         # code you want to time
-        target_q = self.model.predict(states, verbose=0)
-        next_q = self.target_model.predict(next_states, verbose=0)
-        start_replay = time.time()
-        for i in range(self._batch_size):
-            target = rewards[i]
-            if not dones[i]:
-                target += self._gamma * np.max(next_q[i])
-            target_q[i][actions[i]] = target
+        target_q = self.model(states, verbose=0).numpy()
+        next_actions = np.argmax(self.model(next_states, training=False).numpy(), axis=1)
+        next_q_values = self.target_model(next_states, training=False).numpy()
+        chosen_next_q = next_q_values[np.arange(self._batch_size), next_actions]
+        targets = rewards + (1 - dones) * self._gamma * chosen_next_q
+        target_q[np.arange(self._batch_size), actions] = targets
 
         self.model.train_on_batch(states, target_q)
-        if self.steps % self.target_sync == 0:
+
+        if self.target_sync_steps > self.target_sync:
+            self.target_sync_steps = 0
             self.update_target_model()
 
         if self._epsilon > self._epsilon_min:
             self._epsilon *= self._epsilon_decay
-        end_replay = time.time()
-        print("Replay took:", end_replay - start_replay, "seconds")
     # --- Reward Tracking ---
     def add_event(self, evicted, inserted, state, action, next_state, way0, way1, way2):
         if self.evaluation_mode:
