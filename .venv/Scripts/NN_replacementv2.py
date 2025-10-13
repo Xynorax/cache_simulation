@@ -48,12 +48,12 @@ class rl_agent:
         # --- Q-Network ---
         model = keras.Sequential([
             keras.Input(shape=(self._state_dim,)),
-            keras.layers.Dense(self._layer1_dim, activation="tanh"),
-            keras.layers.Dense(self._hidden_dim, activation="tanh"),
+            keras.layers.Dense(self._layer1_dim, activation="relu"),
+            keras.layers.Dense(self._hidden_dim, activation="relu"),
             keras.layers.Dense(self._assoc, activation="linear")
         ])
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001),
-                      loss='mse')
+                      loss='huber')
         return model
 
     def update_target_model(self):
@@ -70,15 +70,14 @@ class rl_agent:
     def store_transition(self, state, action, reward, next_state, done=False):
         if self.evaluation_mode:
             return
-        if Parameters.instructions_number > 1000000:
-            start = time.time()
-            # code you want to time
+        start = time.time()
+        # code you want to time
 
-            self.memory.append((state, action, reward, next_state, done))
-            end = time.time()
-            print("Store transistion excluding replay:", end - start, "seconds")
-            self.replay()
-            self.rewards += reward
+        self.memory.append((state, action, reward, next_state, done))
+        end = time.time()
+        print("Store transistion excluding replay:", end - start, "seconds")
+        self.replay()
+        self.rewards += reward
         if done:
 
             # Save online model weights
@@ -90,7 +89,7 @@ class rl_agent:
     def replay(self):
         if self.evaluation_mode:
             return
-        if len(self.memory) < self._batch_size or Parameters.instructions_number < 1000_000:
+        if len(self.memory) < self._batch_size:
             return
         self.steps += 1
         if self.steps < self._batch_size:
@@ -98,7 +97,7 @@ class rl_agent:
         self.steps = 0
         self.target_sync_steps += 1
         # minibatch = [self.memory.popleft() for _ in range(self._batch_size)]
-        minibatch = random.sample(self.memory, self._batch_size)
+        minibatch = random.sample(self.memory, min(self._batch_size, len(self.memory)))
         states = np.array([s for s, _, _, _, _ in minibatch], dtype=np.float32)
         actions = np.array([a for _, a, _, _, _ in minibatch])
         rewards = np.array([r for _, _, r, _, _ in minibatch])
