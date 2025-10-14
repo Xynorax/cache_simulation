@@ -12,7 +12,7 @@ os.environ["XLA_FLAGS"] = "--xla_gpu_cuda_data_dir=/usr/lib/cuda"
 
 class rl_agent:
     # --- Hyperparameters ---
-    def __init__(self, gamma=0.95, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.999, batch_size=1024, episodes=50):
+    def __init__(self, gamma=0.95, epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.9999, batch_size=1024, episodes=100):
         self.evaluation_mode = False
         self._gamma = gamma  # discount factor
         self._epsilon = epsilon  # exploration rate
@@ -20,10 +20,11 @@ class rl_agent:
         self._epsilon_decay = epsilon_decay
         self._batch_size = batch_size
         self._episodes = episodes
-        self.target_sync = 30 * self._batch_size // self._batch_size
+        self.target_sync = 200 * self._batch_size // self._batch_size
         self.steps = 0
         self.target_sync_steps = 0
         self.rewards = 0
+        self.loss = 0
         # --- Replay buffer ---
         self.memory = deque(maxlen=30000)
         # --- Neural network ---
@@ -112,7 +113,7 @@ class rl_agent:
         targets = rewards + (1 - dones) * self._gamma * chosen_next_q
         target_q[np.arange(self._batch_size), actions] = targets
 
-        self.model.train_on_batch(states, target_q)
+        self.loss = self.model.train_on_batch(states, target_q)
 
         if self.target_sync_steps > self.target_sync:
             self.target_sync_steps = 0
@@ -134,7 +135,7 @@ class rl_agent:
             "way0": way0,
             "way1": way1,
             "way2": way2,
-            "reward": 5
+            "reward": 10
         }
         self.pending_events.append(event)
 
@@ -150,12 +151,12 @@ class rl_agent:
             elif access_addr == event["way2"]:
                 event["way2"] = None
             elif access_addr == event["inserted"] and event["inserted"] != None:
-                event["reward"] += 0.1
+                event["reward"] += 5
                 event["inserted"] = None
 
             if access_addr == event["evicted"]:
                 none_count = sum(1 for v in event.values() if v is None)
-                self.store_transition(event["state"], event["action"], -1, event["next_state"])
+                self.store_transition(event["state"], event["action"], -5.0 + (none_count * 0.5), event["next_state"])
                 self.pending_events.remove(event)
             if event["way0"] == None and event["way1"] == None and event["way2"] == None and event[
                 "inserted"] == None:

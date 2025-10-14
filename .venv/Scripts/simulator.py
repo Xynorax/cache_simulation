@@ -358,8 +358,7 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
                 LLC_ctr = LLC_ctr0
             read(address, memory, LLC_ctr, pc, level_inversed)
 
-        print(f" read from " +
-              util.bin_str(address, MEMORY), f"{address}")
+        # print(f" read from " +util.bin_str(address, MEMORY), f"{address}")
 
     elif command == "write" and len(params) == 2:
         address = int(params[0])
@@ -377,8 +376,7 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
             else:
                 LLC_ctr = LLC_ctr0
             write(address, byte, memory, LLC_ctr, pc, level_inversed)
-        print(" written to " +
-              util.bin_str(address, MEMORY), f"{address}")
+        #print(" written to " +util.bin_str(address, MEMORY), f"{address}")
 
     elif command == "randread" and len(params) == 1:
         amount = int(params[0])
@@ -705,15 +703,16 @@ for E in range(rl._episodes):
         cache_hits_end[k] = hits
         cache_misses_end[k] = misses
         hit_percent[k] = hits / (hits + misses) if (hits + misses) != 0 else 0.0
-        rl.store_transition([0] * rl._state_dim, 0, 0, [0] * rl._state_dim, True)
+
         with open("Episodes.txt", "a") as f:
             f.write(f"Episode: {E} ")
             f.write(f"Level 7 miss counter: {ctr_cache_misses} ")
             f.write(f"Epsilon: {rl._epsilon}")
-            f.write(f"Rewards: {rl.rewards}")
+            f.write(f"Rewards: {rl.rewards} ")
+            f.write(f"Loss: {rl.loss} ")
             f.write(f"Cache level hits: {LLC_ctr_level_hits}\n")
             f.write(f"Cache level misses: {LLC_ctr_level_misses}\n")
-
+        rl.store_transition([0] * rl._state_dim, 0, 0, [0] * rl._state_dim, True)
     if rl.evaluation_mode:
         break
     else:
