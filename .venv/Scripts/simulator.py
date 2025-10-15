@@ -636,7 +636,7 @@ def benchmark_trace(MAX_INSTRUCTIONS):
                     MemoryAccess("read", src_addr, pc=program_counter)
 
 
-for E in range(1):
+for E in range(rl._episodes):
     for k in range(len(simulations)):
         ctr_cache_misses = 0
         LLC_ctr_level_hits = [0] * TREE_LEVELS
