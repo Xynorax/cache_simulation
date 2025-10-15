@@ -48,7 +48,7 @@ class Cache:
             log(self._block_size, 2))
         # Bit offset of cache line set
         self._set_shift = int(log(self._block_size, 2))
-        if self._replace_pol == Cache.ship_plus:
+        if self._replace_pol == Cache.ship_plus or self._replace_pol == "RL":
             self._shct = self.SHCT()
             total_sets = size // (block_size * mapping_pol)
             spacing = total_sets // 16
@@ -126,9 +126,7 @@ class Cache:
             index = signature % self.num_entries
             return self.counters[index]
 
-
-
-    def read(self, address, pc, level):
+    def read(self, address, pc, level, lazy_update=0):
         """Read a block of memory from the cache.
 
         :param int address: memory address for data to read from cache
@@ -157,14 +155,24 @@ class Cache:
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
                 self._plru_update(set_num, way_index)
-            elif (self._replace_pol == Cache.ship_plus):
-                set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
-                if set_idx in self.sampled_sets:
-                    if line.r == 0:
-                        self._shct.increment_counter(line.signature)
-                        line.r = 1
-                line.rrpv = 0
+            elif (self._replace_pol == Cache.ship_plus) or self:
+                if not lazy_update:
+                    set_idx = (address >> self._set_shift) & (
+                                (self._size // (self._block_size * self._mapping_pol)) - 1)
+                    if set_idx in self.sampled_sets:
+                        if line.r == 0:
+                            self._shct.increment_counter(line.signature)
+                            line.r = 1
+                    line.rrpv = 0
             elif self._replace_pol == "RL":
+                if not lazy_update:
+                    set_idx = (address >> self._set_shift) & (
+                                (self._size // (self._block_size * self._mapping_pol)) - 1)
+                    if set_idx in self.sampled_sets:
+                        if line.r == 0:
+                            self._shct.increment_counter(line.signature)
+                            line.r = 1
+                    line.rrpv = 0
                 if line.hits < 200:
                     line.hits += 1
                 line.preuse_distance = line.age_counter
@@ -312,9 +320,13 @@ class Cache:
             ways_lazy_updated = [0] * self._mapping_pol
             for i in range(len(set)):
                 ways_lazy_updated[i] = set[i].lazy_updated
-
+            ways_rrpv = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_rrpv[i] = set[i].rrpv
+            incoming_signature = self._shct.get_signature(pc)
+            signature_counter = self._shct.get_counter(incoming_signature)
             state = build_state(ways_hits, address, pc, lazy_update, level, ways_levels,
-                                ways_preuse, ways_dirty, ways_lazy_updated)
+                                ways_preuse, ways_dirty, ways_lazy_updated, ways_rrpv, signature_counter)
 
             victim_idx = rl.choose_action(state)
             # Insert incoming
@@ -340,6 +352,33 @@ class Cache:
             victim.use = 0
             victim.age_counter = 0
             victim.preuse_distance = 0
+            ## RRPV section ##
+            dummy_victim = None
+            while dummy_victim == None:
+                for index in range(len(set)):  # Check which line has RRPV = 3
+                    if set[index].rrpv == 3:
+                        dummy_victim = set[index]
+                        break
+                if dummy_victim != None:
+                    break
+                for item in set:
+                    item.rrpv += 1
+
+            if WB_insertion == 1:
+                victim.rrpv = 0
+            elif self._shct.get_counter(incoming_signature) == 0:
+                victim.rrpv = 3
+            elif self._shct.get_counter(incoming_signature) == self._shct.max_counter:
+                victim.rrpv = 0
+            else:
+                victim.rrpv = 2
+            set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
+            if victim.r == 0 and victim.valid and set_idx in self.sampled_sets:
+                self._shct.decrement_counter(victim.signature)
+            if set_idx in self.sampled_sets:
+                victim.r = 0
+                victim.signature = incoming_signature
+            ## End of RRPV section ##
             ways_levels = [0] * self._mapping_pol
             for i in range(len(set)):
                 ways_levels[i] = set[i].level
@@ -355,8 +394,11 @@ class Cache:
             ways_lazy_updated = [0] * self._mapping_pol
             for i in range(len(set)):
                 ways_lazy_updated[i] = set[i].lazy_updated
+            ways_rrpv = [0] * self._mapping_pol
+            for i in range(len(set)):
+                ways_rrpv[i] = set[i].rrpv
             next_state = build_state(ways_hits, address, pc, lazy_update, level, ways_levels,
-                                     ways_preuse, ways_dirty, ways_lazy_updated)
+                                     ways_preuse, ways_dirty, ways_lazy_updated, ways_rrpv, signature_counter)
             way = [0] * (self._mapping_pol - 1)
             x = 0
             set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1

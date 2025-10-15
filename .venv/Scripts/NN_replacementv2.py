@@ -28,7 +28,7 @@ class rl_agent:
         # --- Replay buffer ---
         self.memory = deque(maxlen=30000)
         # --- Neural network ---
-        self._state_dim = 56
+        self._state_dim = 61
         self._layer1_dim = 64
         self._hidden_dim = 32
         self._assoc = 4
@@ -151,12 +151,13 @@ class rl_agent:
             elif access_addr == event["way2"]:
                 event["way2"] = None
             elif access_addr == event["inserted"] and event["inserted"] != None:
-                event["reward"] += 5
+                event["reward"] += 2
                 event["inserted"] = None
 
             if access_addr == event["evicted"]:
                 none_count = sum(1 for v in event.values() if v is None)
-                self.store_transition(event["state"], event["action"], -5.0 + (none_count * 0.5), event["next_state"])
+                self.store_transition(event["state"], event["action"], -0.00001 + (none_count * 0.0000025),
+                                      event["next_state"])
                 self.pending_events.remove(event)
             if event["way0"] == None and event["way1"] == None and event["way2"] == None and event[
                 "inserted"] == None:
@@ -188,7 +189,7 @@ def one_hot(val, categories):
 
 
 def build_state(ways_hits, request_address, pc, access_type, access_level, ways_levels, ways_preuse, ways_dirty,
-                ways_lazy_updated):
+                ways_lazy_updated, ways_rrpv, signature_counter):
     features = []
     block_offset = (request_address) & 0x3F
     set_index = (request_address >> 6) & 0x3FF
@@ -207,6 +208,9 @@ def build_state(ways_hits, request_address, pc, access_type, access_level, ways_
         features.append(normalize(ways_preuse[i], 50))
     features += (ways_dirty)
     features += (ways_lazy_updated)
+    for i in range(len(ways_rrpv)):
+        features.append(normalize(ways_rrpv[i], 3))
+    features.append(normalize(signature_counter, 7))  # 6
     features.append(normalize(Parameters.randomness, RANDOMNESS_MAX_VALUE))
 
     return features

@@ -60,7 +60,7 @@ def lazy_update(node_address, pc):
         else:
             update_cache = LLC_ctr0
 
-        cache_block = update_cache.read(parent_address, pc, level=level)
+        cache_block = update_cache.read(parent_address, pc, level=level, lazy_update=1)
         if cache_block:
             update_cache.write(parent_address, byte, pc, level=level)
             hit = True
@@ -358,7 +358,7 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
                 LLC_ctr = LLC_ctr0
             read(address, memory, LLC_ctr, pc, level_inversed)
 
-        # print(f" read from " +util.bin_str(address, MEMORY), f"{address}")
+        print(f" read from " + util.bin_str(address, MEMORY), f"{address}")
 
     elif command == "write" and len(params) == 2:
         address = int(params[0])
@@ -376,7 +376,7 @@ def initiate_command(cmd, ctr=False, pc=0, level_inversed=TREE_LEVELS):
             else:
                 LLC_ctr = LLC_ctr0
             write(address, byte, memory, LLC_ctr, pc, level_inversed)
-        #print(" written to " +util.bin_str(address, MEMORY), f"{address}")
+        print(" written to " + util.bin_str(address, MEMORY), f"{address}")
 
     elif command == "randread" and len(params) == 1:
         amount = int(params[0])
@@ -527,8 +527,13 @@ def benchmark_manual():  ##Benchmark 2 - Manually inputed values
     # MemoryAccess("write", 2883584)
     # MemoryAccess("write", 3932160)
     MemoryAccess("read", 0)
-    MemoryAccess("read", 8)
-    MemoryAccess("read", 64)
+    MemoryAccess("read", 524288)
+    MemoryAccess("read", 1048576)
+    MemoryAccess("read", 2097152)
+    MemoryAccess("read", 4194304)
+    l1cache.invalidate_line(0)
+    LLC.invalidate_line(0)
+    MemoryAccess("read", 0)
 
     #MemoryAccess("read", 2097152)
     MemoryAccess("read", 40000)
@@ -631,7 +636,7 @@ def benchmark_trace(MAX_INSTRUCTIONS):
                     MemoryAccess("read", src_addr, pc=program_counter)
 
 
-for E in range(rl._episodes):
+for E in range(1):
     for k in range(len(simulations)):
         ctr_cache_misses = 0
         LLC_ctr_level_hits = [0] * TREE_LEVELS
@@ -731,7 +736,6 @@ with open("level2_cc_trace.txt", 'w') as file:
 with open("level3_cc_trace.txt", 'w') as file:
     file.writelines(level3_cc_trace)
 print(f"Warm up instructions: {WARMUP_INSTRUCTIONS}")
-print(f"Size of L1 cache: {l1_cache_size}")
 print(simulations)
 print("Execution times:")
 min_value = min(Execution_Times)
