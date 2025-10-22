@@ -6,7 +6,7 @@ import tensorflow as tf
 import util
 # from NN_replacementv2 import build_state, rl, TREE_LEVELS
 from Parameters import smart_set_indexing, randomness, randomness_num_entries, global_shct, rr_log, TREE_LEVELS, \
-    simulations
+    simulations, ctr_shct, tracked_set, find_parent_node, pdl
 from line import Line
 
 
@@ -151,7 +151,7 @@ class Cache:
             if self._type == "ctr_cache":
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
-                if set_num == 0b1110001110:
+                if set_num == tracked_set:
                     if self._size == 2 ** 19:
                         rr_log.resolve((address >> 6) << 6)
         if self._replace_pol == "RL":
@@ -168,12 +168,19 @@ class Cache:
                 self._plru_update(set_num, way_index)
             elif (self._replace_pol == Cache.ship_plus):
                 if not lazy_update:
+                    # self.level_aware_ship(address,pc,level)
+                    pdl.increment_level(pc, level)
+                    # self.pdl_aware_ship(address, pc, level)
+                    # self.write_to_log(address, None, level, "read")
                     line.hits += 1
                     set_idx = (address >> self._set_shift) & (
                             (self._size // (self._block_size * self._mapping_pol)) - 1)
                     if set_idx in self.sampled_sets:
                         if line.r == 0:
-                            global_shct.increment_counter(line.signature, line.level)
+                            if self._type == "ctr_cache":
+                                ctr_shct.increment_counter(line.signature, line.level)
+                            else:
+                                global_shct.increment_counter(line.signature, line.level)
                             line.r = 1
                     line.rrpv = 0
             elif self._replace_pol == "RL":
@@ -256,8 +263,8 @@ class Cache:
                         break
                     for item in set:
                         item.rrpv += 1"""
+            #Filter RRPV first then PDL
             if victim == None:
-
                 while (not possible_victims):
                     for i in set:
                         if i.rrpv == 7:
@@ -266,20 +273,41 @@ class Cache:
                         for item in set:
                             item.rrpv += 1
                 victim = possible_victims[0]
-                for possible_victim in possible_victims:
-                    if possible_victim.level > victim.level:
-                        victim = possible_victim
+                """for possible_victim in possible_victims:
+                    pdl_counters = pdl.get_counter(possible_victim.pc, level)
+                    max_pdl_counter = max(pdl_counters)
+                    max_idx = pdl_counters.index(max(pdl_counters))
+                    for i in range(TREE_LEVELS + 1):
+                        if i == max_idx:
+                            continue
+                        if pdl_counters[i] > (3 * max_pdl_counter) // 4:
+                            victim = possible_victim"""
             incoming_signature = global_shct.get_signature(pc)
-            pc_counter, level_counter = global_shct.get_counter(incoming_signature, level)
+            if self._type == "ctr_cache":
+                pc_counter, level_counter = ctr_shct.get_counter(incoming_signature, level)
+            else:
+                pc_counter, level_counter = global_shct.get_counter(incoming_signature, level)
 
-            if self._type == "ctr_cache" and self._size == 2 ** 19 and victim.valid:
+            victim_address = None
+            if victim.valid:
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
-                if set_num == 0b1110001110:
-                    state = [0] * 51
-                    victim_address = victim.tag << (self._tag_shift) | (
-                            ((address >> self._set_shift) & set_mask) << self._set_shift)
+                victim_address = victim.tag << (self._tag_shift) | (
+                        ((address >> self._set_shift) & set_mask) << self._set_shift)
+
+            #self.write_to_log(address, victim_address, level, "load")
+
+            if self._type == "ctr_cache" and self._size == 2 ** 19 and victim.valid:
+
+                if set_num == tracked_set:
+                    pc_counter_global_shct, level_counter_global_shct = global_shct.get_counter(incoming_signature,
+                                                                                                level)
+                    state = [0] * 63
+
                     children_number, children_hits = self.count_children_in_LLC_and_l1(victim_address)
+                    state[53] = pdl.get_counter(victim.pc, level)
+                    state[52] = pc_counter_global_shct
+                    state[51] = pc_counter
                     state[43] = children_hits
                     state[35] = victim.lazy_updated
                     state[27] = victim.modified
@@ -295,6 +323,7 @@ class Cache:
                         way_address = set[i].tag << (self._tag_shift) | (
                                 ((address >> self._set_shift) & set_mask) << self._set_shift)
                         children_number, children_hits = self.count_children_in_LLC_and_l1(way_address)
+                        state[x + 54] = pdl.get_counter(set[i].pc, level)
                         state[x + 44] = children_hits
                         state[x + 36] = set[i].lazy_updated
                         state[x + 28] = set[i].modified
@@ -302,25 +331,52 @@ class Cache:
                         state[x + 12] = children_number
                         state[x + 4] = set[i].rrpv
 
-                        x +=1
+                        x += 1
 
-
-            if lazy_update:
-                if Parameters.randomness > 64:
-                    victim.rrpv = 2
+            pdl_counters = pdl.get_counter(pc, level)
+            if level == TREE_LEVELS:
+                if lazy_update:
+                    if Parameters.randomness > 64:
+                        victim.rrpv = 2
+                    else:
+                        victim.rrpv = 7
+                elif WB_insertion == 1:
+                    victim.rrpv = 0
+                elif pc_counter == 0:
+                    victim.rrpv = 7
+                elif pc_counter == global_shct.max_counter:
+                    victim.rrpv = 0
                 else:
-                    victim.rrpv = 3
-            elif WB_insertion == 1:
-                victim.rrpv = 0
-            elif pc_counter == 0:
-                victim.rrpv = 3
-            elif pc_counter == global_shct.max_counter:
-                victim.rrpv = 0
+                    victim.rrpv = 2
             else:
-                victim.rrpv = 2
+                if lazy_update:
+                    if Parameters.randomness > 64:
+                        victim.rrpv = 2
+                    else:
+                        victim.rrpv = 3
+                elif pc_counter == global_shct.max_counter:
+                    if (pdl_counters[level] > 3 * pdl_counters[TREE_LEVELS] // 4):
+                        victim.rrpv = 0
+                    else:
+                        victim.rrpv = 1
+                elif (pdl_counters[level] > 3 * pdl_counters[TREE_LEVELS] // 4):
+                    victim.rrpv = 1
+                elif pc_counter == 0:
+                    victim.rrpv = 7
+                else:
+                    victim.rrpv = 5
+
+
+
+
             set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
             if victim.r == 0 and victim.valid and set_idx in self.sampled_sets:
-                global_shct.decrement_counter(victim.signature, victim.level)
+                if self._type == "ctr_cache":
+                    ctr_shct.decrement_counter(victim.signature, victim.level)
+                else:
+                    global_shct.decrement_counter(victim.signature, victim.level)
+
+
             if set_idx in self.sampled_sets:
                 victim.r = 0
                 victim.signature = incoming_signature
@@ -341,7 +397,7 @@ class Cache:
                             ((address >> self._set_shift) & mask) << self._set_shift)
                     if (victim_address) == 8592810880:
                         print("Debug")
-                    if set_num == 0b1110001110:
+                    if set_num == tracked_set:
                         if self._size == 2 ** 19:
                             if victim_address == 8592614272:
                                 print("Debug")
@@ -477,6 +533,10 @@ class Cache:
         victim.tag = tag
         victim.data = data
         victim.level = level
+        victim.hits = 0
+        victim.pc = pc
+        if victim_address == 2657088 and ((address >> 6) << 6) == 1215296:
+            print("Debug!")
         if level == TREE_LEVELS - 2 and l1_victim != None:
             print("Debug")
         return victim_info, l1_victim
@@ -505,7 +565,7 @@ class Cache:
             if self._type == "ctr_cache":
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
-                if set_num == 0b1110001110:
+                if set_num == tracked_set:
                     if self._size == 2 ** 19:
                         rr_log.resolve((address >> 6) << 6)
         # Update data of cache line
@@ -745,14 +805,14 @@ class Cache:
                 candidate.valid = 0
                 break
 
-    def update_parent_rrpv(self, address):
+    def update_parent_rrpv(self, address, rrpv_value):
         tag = self._get_tag(address)  # Tag of cache line
         set = self._get_set(address)  # Set of cache lines
         line = None
         # Search for cache line within set
         for candidate in set:
             if candidate.tag == tag and candidate.valid:
-                candidate.rrpv = 0
+                candidate.rrpv = rrpv_value
                 break
 
     def check_children(self, parent_address):
@@ -793,7 +853,92 @@ class Cache:
 
         return children_number, children_hits
 
+    def write_to_log(self, accessing_address, evicted_address=None, level=1, read_load=None):
+        parent_evicted_set_num = None
+        evicted_set_num = None
+        if level == TREE_LEVELS and self._type != "level1":
+            parent_address, parent_level = find_parent_node(accessing_address)
+            set_mask = (LLC_ctr3._size // (LLC_ctr3._block_size * LLC_ctr3._mapping_pol)) - 1
+            parent_set_num = (parent_address >> LLC_ctr3._set_shift) & set_mask
+            if evicted_address != None:
+                parent_evicted_address, parent_level = find_parent_node(evicted_address)
+                parent_evicted_set_num = (parent_evicted_address >> LLC_ctr3._set_shift) & set_mask
+            if parent_set_num == tracked_set:
+                if read_load == "read" or parent_evicted_set_num == tracked_set:
+                    with open("rereference_log.txt", "a") as file:
+                        file.write("Subtree: ")
+                        file.write(str(parent_address >> LLC_ctr3._tag_shift))
+                        file.write(" ")
+                        file.write(str(accessing_address))
+                        file.write(" accessed \n")
+                if read_load == "load":
+                    with open("rereference_log.txt", "a") as file:
+                        file.write("Subtree: ")
+                        file.write(str(parent_address >> LLC_ctr3._tag_shift))
+                        file.write(" ")
+                        file.write(str(accessing_address))
+                        file.write(" inserted ")
+                        file.write(str(evicted_address))
+                        file.write(" evicted \n")
+        elif level == TREE_LEVELS - 1:
+            set_mask = (LLC_ctr3._size // (LLC_ctr3._block_size * LLC_ctr3._mapping_pol)) - 1
+            set_num = (accessing_address >> LLC_ctr3._set_shift) & set_mask
+            if evicted_address != None:
+                evicted_set_num = (evicted_address >> LLC_ctr3._set_shift) & set_mask
+            if set_num == tracked_set or evicted_set_num == tracked_set:
+                if read_load == "read":
+                    with open("rereference_log.txt", "a") as file:
+                        file.write("Subtree: ")
+                        file.write(str(accessing_address >> LLC_ctr3._tag_shift))
+                        file.write(" ")
+                        file.write(str(accessing_address))
+                        file.write(" accessed \n")
+                if read_load == "load":
+                    with open("rereference_log.txt", "a") as file:
+                        file.write("Subtree: ")
+                        file.write(str(accessing_address >> LLC_ctr3._tag_shift))
+                        file.write(" ")
+                        file.write(str(accessing_address))
+                        file.write(" inserted ")
+                        file.write(str(evicted_address))
+                        file.write(" evicted \n")
 
+    def level_aware_ship(self, address, pc, level):
+        counter, level_counter = global_shct.get_counter(global_shct.get_signature(pc), level)
+        if counter != global_shct.max_counter:
+            parent_address, parent_level = find_parent_node(address)
+            if parent_level == TREE_LEVELS - 1:
+                update_cache = LLC_ctr3
+            elif parent_level == TREE_LEVELS - 2:
+                update_cache = LLC_ctr2
+            elif parent_level == TREE_LEVELS - 3:
+                update_cache = LLC_ctr1
+            else:
+                update_cache = LLC_ctr0
+            update_cache.update_parent_rrpv(parent_address, 0)
+            # Later add prefetch of parent if cannot update its RRPV
+
+    def pdl_aware_ship(self, address, pc, level):
+        counters = pdl.get_counter(pc, level)
+        update_up_to = None
+        for idx, counter in enumerate(counters):
+            if idx >= level:
+                continue
+            if counter > (3 * max(counters) // 4):  # Maybe change to level 7
+                update_up_to = idx
+                break
+        if update_up_to != None:
+            for i in range(level, update_up_to, -1):
+                address, parent_level = find_parent_node(address)
+                if parent_level == TREE_LEVELS - 1:
+                    update_cache = LLC_ctr3
+                elif parent_level == TREE_LEVELS - 2:
+                    update_cache = LLC_ctr2
+                elif parent_level == TREE_LEVELS - 3:
+                    update_cache = LLC_ctr1
+                else:
+                    update_cache = LLC_ctr0
+                update_cache.update_parent_rrpv(address, 0)
 k = 0
 l1_cache_size = (2 ** 15) // 2
 

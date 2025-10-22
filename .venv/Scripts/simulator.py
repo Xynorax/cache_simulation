@@ -89,6 +89,9 @@ def lazy_update(node_address, pc):
 def promotion(address, cache, pc, level=TREE_LEVELS, modified=False):
     block = bytearray(8)
     cache_block = cache.read(address, pc, level=level)
+    if modified:
+        parent_address, level = find_parent_node(address)
+        LLC.update_parent_rrpv(parent_address, 0)
     victim_address = None
     if cache_block and not modified:
         return
@@ -560,8 +563,10 @@ def benchmark_manual():  ##Benchmark 2 - Manually inputed values
     # MemoryAccess("write", 2883584)
     # MemoryAccess("write", 3932160)
     MemoryAccess("read", 0)
-    MemoryAccess("read", 8)
-    MemoryAccess("read", 64)
+    MemoryAccess("read", 524288)
+    MemoryAccess("read", 1048576)
+    MemoryAccess("read", 2097152)
+    MemoryAccess("read", 4194304)
 
     #MemoryAccess("read", 2097152)
     MemoryAccess("read", 40000)

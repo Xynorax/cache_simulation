@@ -66,6 +66,8 @@ lazy_update_active = True
 lazy_update_misses = 0
 total_evictions = 0
 write_to_log = True
+tracked_set = 0b1110001110  #
+# tracked_set = 0b1001001001 # Address 0
 ###Randomness calculator variables###
 previous_address = 0
 randomness_num_entries = 65536
@@ -248,6 +250,7 @@ class tree_table:
         return self.counters[index]
 
 global_shct = SHCT()
+ctr_shct = SHCT()
 global_tree_table = tree_table(TREE_ARITY, TREE_ROOTS, 5)
 
 
@@ -355,3 +358,50 @@ class log:
 
 
 rr_log = log()
+
+
+class PDL:
+    def __init__(self):
+        self.level_pdl_counter = [[0] * (TREE_LEVELS + 1) for _ in range(65536)]
+        self.signature_bits = 14
+        self.reward_increment = 3
+        self.reward_decrement = 1
+        self.max_counter_val = (2 ** 32) - 1
+
+    def increment_level(self, pc, level):
+        signature = (pc << 1) & (2 ** self.signature_bits) - 1  # 14-bit mask
+        for i in range(TREE_LEVELS + 1):
+            if i != level:
+                if self.level_pdl_counter[signature][i] > 0:
+                    self.level_pdl_counter[signature][i] -= self.reward_decrement
+            else:
+                if self.level_pdl_counter[signature][i] < self.max_counter_val:
+                    self.level_pdl_counter[signature][i] += self.reward_increment
+
+    def get_counter(self, pc, level):
+        signature = (pc << 1) & (2 ** self.signature_bits) - 1  # 14-bit mask
+        return self.level_pdl_counter[signature]
+
+
+"""class PDL:
+    def __init__(self):
+        #self.level_pdl_counter = [[0]*(TREE_LEVELS+1) for _ in range(65536)]
+        self.level_pdl_counter = [0] * (TREE_LEVELS + 1)
+        self.reward_increment = 3
+        self.reward_decrement = 1
+        self.max_counter_val = (2**32)-1
+
+    def increment_level(self,pc,level):
+        for i in range (TREE_LEVELS+1):
+            if i != level:
+                if self.level_pdl_counter[i] > 0:
+                    self.level_pdl_counter[i] -= self.reward_decrement
+            else:
+                if self.level_pdl_counter[i] < self.max_counter_val:
+                    self.level_pdl_counter[i] += self.reward_increment
+
+    def get_counter(self, pc, level):
+        signature = (pc << 1) & 0xFFFF  # 14-bit mask
+        return self.level_pdl_counter"""
+
+pdl = PDL()

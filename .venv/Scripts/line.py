@@ -17,3 +17,4 @@ class Line:
         self.signature = 0
         self.level = 0
         self.lazy_updated = 0
+        self.pc = 0
