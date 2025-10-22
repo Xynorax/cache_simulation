@@ -171,7 +171,7 @@ def read(address, memory, cache, pc, level=TREE_LEVELS):
                 if level < TREE_LEVELS:
                     level_misses[level] += 1
         elif cache._type == "ctr_cache":
-            load = False
+            load = True  # Ignore randomness
             if level == 0 and Parameters.randomness > RANDOMNESS_MAX_VALUE - 10:
                 load = True
             elif level == 1 and Parameters.randomness > RANDOMNESS_MAX_VALUE - 10:
@@ -683,13 +683,13 @@ for k in range(len(simulations)):
     LLC_ctr3 = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
                      2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
-    LLC_ctr2 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
+    LLC_ctr2 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
                      2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
-    LLC_ctr1 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
+    LLC_ctr1 = Cache(simulations[k][1] // 32, simulations[k][0], simulations[k][2],
                      2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
-    LLC_ctr0 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
+    LLC_ctr0 = Cache(simulations[k][1] // 32, simulations[k][0], simulations[k][2],
                      2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
 
     l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",

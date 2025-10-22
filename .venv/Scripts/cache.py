@@ -675,7 +675,8 @@ class Cache:
                 break
 
     def update_children_counter(self, address, value):
-        tag = self._get_tag(address)  # Tag of cache line
+        print("Nothing")
+        """tag = self._get_tag(address)  # Tag of cache line
         set = self._get_set(address)  # Set of cache lines
         line = None
         # Search for cache line within set
@@ -683,4 +684,4 @@ class Cache:
             if candidate.tag == tag and candidate.valid:
                 candidate.children += value
                 print("Children Value ", candidate.children)
-                break
+                break"""
