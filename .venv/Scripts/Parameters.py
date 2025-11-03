@@ -359,8 +359,7 @@ class log:
 
 rr_log = log()
 
-
-class PDL:
+"""class PDL:
     def __init__(self):
         self.level_pdl_counter = [[0] * (TREE_LEVELS + 1) for _ in range(65536)]
         self.signature_bits = 14
@@ -380,16 +379,17 @@ class PDL:
 
     def get_counter(self, pc, level):
         signature = (pc << 1) & (2 ** self.signature_bits) - 1  # 14-bit mask
-        return self.level_pdl_counter[signature]
+        return self.level_pdl_counter[signature]"""
 
 
-"""class PDL:
+class PDL:
     def __init__(self):
         #self.level_pdl_counter = [[0]*(TREE_LEVELS+1) for _ in range(65536)]
         self.level_pdl_counter = [0] * (TREE_LEVELS + 1)
+        self.insertion_level_pdl_counter = [0] * (TREE_LEVELS + 1)
         self.reward_increment = 3
         self.reward_decrement = 1
-        self.max_counter_val = (2**32)-1
+        self.max_counter_val = (2 ** 18) - 1
 
     def increment_level(self,pc,level):
         for i in range (TREE_LEVELS+1):
@@ -400,8 +400,19 @@ class PDL:
                 if self.level_pdl_counter[i] < self.max_counter_val:
                     self.level_pdl_counter[i] += self.reward_increment
 
+    def increment_insertion_level(self, pc, level):
+        for i in range(TREE_LEVELS + 1):
+            if i != level:
+                if self.insertion_level_pdl_counter[i] > 0:
+                    self.insertion_level_pdl_counter[i] -= self.reward_decrement
+            else:
+                if self.insertion_level_pdl_counter[i] < self.max_counter_val:
+                    self.insertion_level_pdl_counter[i] += self.reward_increment
     def get_counter(self, pc, level):
         signature = (pc << 1) & 0xFFFF  # 14-bit mask
-        return self.level_pdl_counter"""
+        return self.level_pdl_counter
 
+    def get_insertion_counter(self, pc, level):
+        signature = (pc << 1) & 0xFFFF  # 14-bit mask
+        return self.insertion_level_pdl_counter
 pdl = PDL()

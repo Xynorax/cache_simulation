@@ -151,8 +151,9 @@ class Cache:
             if self._type == "ctr_cache":
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
-                if set_num == tracked_set:
-                    if self._size == 2 ** 19:
+                # if set_num == tracked_set:
+                # if self._size == 2 ** 19:
+                if 1:
                         rr_log.resolve((address >> 6) << 6)
         if self._replace_pol == "RL":
             rl.resolve((address >> 6) << 6)
@@ -168,6 +169,7 @@ class Cache:
                 self._plru_update(set_num, way_index)
             elif (self._replace_pol == Cache.ship_plus):
                 if not lazy_update:
+                    self._update_use(line, set, level)
                     # self.level_aware_ship(address,pc,level)
                     pdl.increment_level(pc, level)
                     # self.pdl_aware_ship(address, pc, level)
@@ -245,6 +247,7 @@ class Cache:
             victim = set[index]
 
         elif self._replace_pol == Cache.ship_plus:
+            pdl.increment_insertion_level(pc, level)
             victim = None
             for index in range(len(set)):  # Check if a line in the set is free
                 if set[index].valid == 0:
@@ -297,41 +300,50 @@ class Cache:
 
             #self.write_to_log(address, victim_address, level, "load")
 
-            if self._type == "ctr_cache" and self._size == 2 ** 19 and victim.valid:
+            # if self._type == "ctr_cache" and self._size == 2 ** 19 and victim.valid:
+            if self._type == "ctr_cache" and victim.valid:
+                #if set_num == tracked_set:
 
-                if set_num == tracked_set:
+                if 1:
                     pc_counter_global_shct, level_counter_global_shct = global_shct.get_counter(incoming_signature,
                                                                                                 level)
-                    state = [0] * 63
+                    state = [0] * (71 + TREE_LEVELS*2)
 
                     children_number, children_hits = self.count_children_in_LLC_and_l1(victim_address)
-                    state[53] = pdl.get_counter(victim.pc, level)
+                    pdl_counter = pdl.get_counter(victim.pc, level)
+                    pdl_insertion_counter = pdl.get_insertion_counter(victim.pc, level)
+                    state[62] = set.index(victim)
+                    # state[62] = victim.fifo
+                    # state[54] = victim.use
+                    state[53] = level
                     state[52] = pc_counter_global_shct
                     state[51] = pc_counter
-                    state[43] = children_hits
-                    state[35] = victim.lazy_updated
-                    state[27] = victim.modified
-                    state[19] = victim.hits
-                    state[11] = children_number
-                    state[3] = victim.rrpv
-                    state[2] = victim_address
+                    # state[43] = children_hits
+                    # state[35] = victim.lazy_updated
+                    # state[27] = victim.modified
+                    # state[19] = victim.hits
+                    # state[11] = children_number
+                    # state[3] = victim.rrpv
+                    #state[2] = victim_address
                     state[1] = (address >> 6) << 6
                     x = 0
                     for i in range(self._mapping_pol):
-                        if set[i] == victim:
-                            continue
                         way_address = set[i].tag << (self._tag_shift) | (
                                 ((address >> self._set_shift) & set_mask) << self._set_shift)
                         children_number, children_hits = self.count_children_in_LLC_and_l1(way_address)
-                        state[x + 54] = pdl.get_counter(set[i].pc, level)
-                        state[x + 44] = children_hits
-                        state[x + 36] = set[i].lazy_updated
-                        state[x + 28] = set[i].modified
-                        state[x + 20] = set[i].hits
-                        state[x + 12] = children_number
-                        state[x + 4] = set[i].rrpv
+                        state[i + 63] = set[i].fifo
+                        state[i + 54] = set[i].use
+                        state[i + 43] = children_hits
+                        state[i + 35] = set[i].lazy_updated
+                        state[i + 27] = set[i].modified
+                        state[i + 19] = set[i].hits
+                        state[i + 11] = children_number
+                        state[i + 3] = set[i].rrpv
 
                         x += 1
+                    for i in range(TREE_LEVELS):
+                        state[i + 71] = pdl_counter[i]
+                        state[i + 71 + TREE_LEVELS] = pdl_insertion_counter[i]
 
             pdl_counters = pdl.get_counter(pc, level)
             if level == TREE_LEVELS:
@@ -354,13 +366,10 @@ class Cache:
                         victim.rrpv = 2
                     else:
                         victim.rrpv = 3
-                elif pc_counter == global_shct.max_counter:
-                    if (pdl_counters[level] > 3 * pdl_counters[TREE_LEVELS] // 4):
-                        victim.rrpv = 0
-                    else:
-                        victim.rrpv = 1
                 elif (pdl_counters[level] > 3 * pdl_counters[TREE_LEVELS] // 4):
-                    victim.rrpv = 1
+                    victim.rrpv = 0
+                elif pc_counter == global_shct.max_counter:
+                    victim.rrpv = 3
                 elif pc_counter == 0:
                     victim.rrpv = 7
                 else:
@@ -382,6 +391,8 @@ class Cache:
                 victim.signature = incoming_signature
 
             if self._type == "ctr_cache":
+                victim.use = max(line.use for line in set) + 1
+                self.update_fifo(set, victim)
                 if victim.valid == 1:
                     way = [0] * (self._mapping_pol - 1)
                     x = 0
@@ -397,12 +408,13 @@ class Cache:
                             ((address >> self._set_shift) & mask) << self._set_shift)
                     if (victim_address) == 8592810880:
                         print("Debug")
-                    if set_num == tracked_set:
+                    # if set_num == tracked_set:
+                    if 1:
                         if self._size == 2 ** 19:
                             if victim_address == 8592614272:
                                 print("Debug")
-                            rr_log.add_event(victim_address, ((address >> 6) << 6), way[0], way[1],
-                                             way[2], way[3], way[4], way[5], way[6], state)
+                        rr_log.add_event(victim_address, ((address >> 6) << 6), way[0], way[1],
+                                         way[2], way[3], way[4], way[5], way[6], state)
 
 
         elif self._replace_pol == "pseudo_LRU":
@@ -562,6 +574,7 @@ class Cache:
                 break
 
         if self._replace_pol == "ship_plus":
+            self._update_use(line, set, level)
             if self._type == "ctr_cache":
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
@@ -939,6 +952,19 @@ class Cache:
                 else:
                     update_cache = LLC_ctr0
                 update_cache.update_parent_rrpv(address, 0)
+
+    def update_fifo(self, set, victim):
+        for line in set:
+            if line.valid == 0:
+                victim.fifo = max(line.fifo for line in set) + 1
+                return
+        removed_line_fifo = victim.fifo
+        victim.fifo = max(line.fifo for line in set) + 1
+        for line in set:
+            if line.fifo > removed_line_fifo:
+                line.fifo -= 1
+
+
 k = 0
 l1_cache_size = (2 ** 15) // 2
 

@@ -18,3 +18,4 @@ class Line:
         self.level = 0
         self.lazy_updated = 0
         self.pc = 0
+        self.fifo = 0
