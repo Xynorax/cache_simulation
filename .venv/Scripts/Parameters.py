@@ -13,7 +13,7 @@ block_size = 2 ** BLOCK
 mapping = 2 ** MAPPING
 replace_policy = "LRU"
 write_policy = "WB"
-replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus", "modified_LRU", "pseudo_LRU", "RL"]
+replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus", "modified_LRU", "pseudo_LRU", "RL", "hyve"]
 write_policies = ["WB", "WT"]
 ctr_cache_size = 2 ** COUNTERS_CACHE
 

@@ -4,7 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1b76b129-89c5-48d0-837d-0b488a32a534" name="Changes" comment="" />
+    <list default="true" id="1b76b129-89c5-48d0-837d-0b488a32a534" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/Cache_Simulation.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.venv/Scripts/Parameters.py" beforeDir="false" afterPath="$PROJECT_DIR$/.venv/Scripts/Parameters.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.venv/Scripts/cache.py" beforeDir="false" afterPath="$PROJECT_DIR$/.venv/Scripts/cache.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -18,7 +25,7 @@
     </option>
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 2
@@ -29,25 +36,52 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.Parameters.executor&quot;: &quot;Run&quot;,
-    &quot;Python.benchmark_memory_accesses.executor&quot;: &quot;Run&quot;,
-    &quot;Python.benchmark_random_read.executor&quot;: &quot;Run&quot;,
-    &quot;Python.benchmarks.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;Python.memory.executor&quot;: &quot;Run&quot;,
-    &quot;Python.simulator.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;D:/Youssef/TUM/Master thesis&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;project.propVCSSupport.DirectoryMappings&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.Parameters.executor": "Run",
+    "Python.benchmark_memory_accesses.executor": "Run",
+    "Python.benchmark_random_read.executor": "Run",
+    "Python.benchmarks.executor": "Run",
+    "Python.cache.executor": "Debug",
+    "Python.main.executor": "Run",
+    "Python.memory.executor": "Run",
+    "Python.simulator.executor": "Debug",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "git-widget-placeholder": "Config7.llc__ctr__cache__per__level__no__l1.feature__hyve",
+    "last_opened_file_path": "D:/Youssef/TUM/Master thesis/Cache_Simulation/.venv/Scripts/simulator.py",
+    "settings.editor.selected.configurable": "project.propVCSSupport.DirectoryMappings"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="D:\Youssef\TUM\Master thesis\Caches_associativity\.venv\Scripts" />
     </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="simulator" type="PythonConfigurationType" factoryName="Python">
+      <module name="Cache_Simulation" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="SDK_NAME" value="Python 3.9 (.venv)" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/.venv/Scripts/simulator.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
   </component>
   <component name="SharedIndexes">
     <attachedChunks>

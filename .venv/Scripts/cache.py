@@ -161,6 +161,9 @@ class Cache:
             if (self._replace_pol == Cache.LRU or
                     self._replace_pol == Cache.LFU or self._replace_pol == Cache.modified_LRU):
                 self._update_use(line, set, level)
+            elif (self._replace_pol == "hyve"):
+                self._update_use(line, set, level)
+                line.hits += 1
             elif (self._replace_pol == Cache.RLR):
                 self._update_rlr(line, set)
             elif (self._replace_pol == "pseudo_LRU"):
@@ -245,7 +248,49 @@ class Cache:
         elif self._replace_pol == Cache.RAND:
             index = random.randint(0, self._mapping_pol - 1)
             victim = set[index]
+        elif self._replace_pol == "hyve":
+            victim = None
+            for index in range(len(set)):  # Check if a line in the set is free
+                if set[index].valid == 0:
+                    victim = set[index]
+            if victim == None:
+                lru_set_values = [0] * self._mapping_pol
+                fifo_set_values = [0] * self._mapping_pol
+                lfu_set_values = [0] * self._mapping_pol
+                points = [0] * self._mapping_pol
+                n = len(set)
+                for i in range(n):
+                    lru_set_values[i] = set[i].use
+                for i in range(n):
+                    fifo_set_values[i] = set[i].fifo
+                for i in range(n):
+                    lfu_set_values[i] = set[i].hits
 
+                # Create index-value pairs and sort by value in descending order (highest first)
+                sorted_pairs = sorted(enumerate(lru_set_values), key=lambda x: x[1], reverse=True)
+                # Assign points: highest value gets highest point
+                for rank, (idx, value) in enumerate(sorted_pairs):
+                    points[idx] += n - 1 - rank
+
+                # Create index-value pairs and sort by value in descending order (highest first)
+                sorted_pairs = sorted(enumerate(fifo_set_values), key=lambda x: x[1], reverse=False)
+                # Assign points: highest value gets highest point
+                for rank, (idx, value) in enumerate(sorted_pairs):
+                    points[idx] += n - 1 - rank
+
+                # Create index-value pairs and sort by value in descending order (highest first)
+                sorted_pairs = sorted(enumerate(lfu_set_values), key=lambda x: x[1], reverse=True)
+                # Assign points: highest value gets highest point
+                for rank, (idx, value) in enumerate(sorted_pairs):
+                    points[idx] += n - 1 - rank
+
+                victim_idx = points.index(max(points))
+                victim = set[victim_idx]
+
+
+                victim.use = min(line.use for line in set) -1
+                victim.hits = 0
+            self.update_fifo(set, victim)
         elif self._replace_pol == Cache.ship_plus:
             pdl.increment_insertion_level(pc, level)
             victim = None
@@ -721,7 +766,7 @@ class Cache:
 
         :param line line: cache line to update use bits of
         """
-        if self._replace_pol == Cache.LRU or self._replace_pol == Cache.modified_LRU:
+        if self._replace_pol == Cache.LRU or self._replace_pol == Cache.modified_LRU or self._replace_pol == "hyve":
             # Set the current line as MRU (highest use value)
             line.use = max(line.use for line in set) + 1
             line.level = level
@@ -960,6 +1005,7 @@ class Cache:
                 return
         removed_line_fifo = victim.fifo
         victim.fifo = max(line.fifo for line in set) + 1
+        removed_line_fifo = victim.fifo
         for line in set:
             if line.fifo > removed_line_fifo:
                 line.fifo -= 1
@@ -973,16 +1019,16 @@ LLC = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
 # def __init__(self, size, mem_size, block_size, mapping_pol, replace_pol, write_pol, type="data_cache"):
 
 LLC_ctr3 = Cache(simulations[k][1] // 2, simulations[k][0], simulations[k][2],
-                 2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                 2 ** 3, replace_pol="hyve", write_pol=simulations[k][5], type="ctr_cache")
 
 LLC_ctr2 = Cache(simulations[k][1] // 8, simulations[k][0], simulations[k][2],
-                 2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                 2 ** 3, replace_pol="hyve", write_pol=simulations[k][5], type="ctr_cache")
 
 LLC_ctr1 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                 2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                 2 ** 3, replace_pol="hyve", write_pol=simulations[k][5], type="ctr_cache")
 
 LLC_ctr0 = Cache(simulations[k][1] // 16, simulations[k][0], simulations[k][2],
-                 2 ** 3, replace_pol="ship_plus", write_pol=simulations[k][5], type="ctr_cache")
+                 2 ** 3, replace_pol="hyve", write_pol=simulations[k][5], type="ctr_cache")
 
 l1cache = Cache(l1_cache_size, simulations[k][0], simulations[k][2], 2 ** 2, "LRU", write_pol="WB",
                 type="level1")
