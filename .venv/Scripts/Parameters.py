@@ -12,7 +12,7 @@ block_size = 2 ** BLOCK
 mapping = 2 ** MAPPING
 replace_policy = "LRU"
 write_policy = "WB"
-replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus", "modified_LRU", "pseudo_LRU", "RL"]
+replacement_policies = ["LRU", "LFU", "FIFO", "RAND", "RLR", "ship_plus", "modified_LRU", "pseudo_LRU", "RL","pdl_aware"]
 write_policies = ["WB", "WT"]
 ctr_cache_size = 2 ** COUNTERS_CACHE
 
@@ -61,7 +61,7 @@ level1_cc_trace = []
 level2_cc_trace = []
 level3_cc_trace = []
 lazy_updated = False
-lazy_update_active = True
+lazy_update_active = False
 lazy_update_misses = 0
 total_evictions = 0
 ###Randomness calculator variables###
@@ -196,3 +196,38 @@ class SHCT:
 
 
 global_shct = SHCT()
+
+class PDL:
+    def __init__(self):
+        #self.level_pdl_counter = [[0]*(TREE_LEVELS+1) for _ in range(65536)]
+        self.level_pdl_counter = [0] * (TREE_LEVELS + 1)
+        self.insertion_level_pdl_counter = [0] * (TREE_LEVELS + 1)
+        self.reward_increment = 6
+        self.reward_decrement = 1
+        self.max_counter_val = (2 ** 18) - 1
+
+    def increment_level(self,pc,level):
+        for i in range (TREE_LEVELS+1):
+            if i != level:
+                if self.level_pdl_counter[i] > 0:
+                    self.level_pdl_counter[i] -= self.reward_decrement
+            else:
+                if self.level_pdl_counter[i] < self.max_counter_val:
+                    self.level_pdl_counter[i] += self.reward_increment
+
+    def increment_insertion_level(self, pc, level):
+        for i in range(TREE_LEVELS + 1):
+            if i != level:
+                if self.insertion_level_pdl_counter[i] > 0:
+                    self.insertion_level_pdl_counter[i] -= self.reward_decrement
+            else:
+                if self.insertion_level_pdl_counter[i] < self.max_counter_val:
+                    self.insertion_level_pdl_counter[i] += self.reward_increment
+    def get_counter(self, pc, level):
+        signature = (pc << 1) & 0xFFFF  # 14-bit mask
+        return self.level_pdl_counter
+
+    def get_insertion_counter(self, pc, level):
+        signature = (pc << 1) & 0xFFFF  # 14-bit mask
+        return self.insertion_level_pdl_counter
+pdl = PDL()

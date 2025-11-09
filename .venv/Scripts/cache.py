@@ -6,7 +6,7 @@ import reward_tracker
 import tensorflow as tf
 import util
 from NN_replacement import NNReplacementPolicy, build_state
-from Parameters import smart_set_indexing, TREE_LEVELS, global_shct
+from Parameters import smart_set_indexing, TREE_LEVELS, global_shct, pdl
 from line import Line
 
 
@@ -219,13 +219,17 @@ class Cache:
             if (self._replace_pol == Cache.LRU or
                     self._replace_pol == Cache.LFU or self._replace_pol == Cache.modified_LRU):
                 self._update_use(line, set, level)
+                pdl.increment_level(pc, level)
             elif (self._replace_pol == Cache.RLR):
                 self._update_rlr(line, set)
             elif (self._replace_pol == "pseudo_LRU"):
                 set_mask = (self._size // (self._block_size * self._mapping_pol)) - 1
                 set_num = (address >> self._set_shift) & set_mask
                 self._plru_update(set_num, way_index)
+            elif (self._replace_pol == "pdl_aware"):
+                pdl.increment_level(pc, level)
             elif (self._replace_pol == Cache.ship_plus):
+                pdl.increment_level(pc, level)
                 set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
                 if set_idx in self.sampled_sets and (
                         level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
@@ -267,32 +271,49 @@ class Cache:
             if self._replace_pol == Cache.FIFO:
                 self._update_use(victim, set)
         elif self._replace_pol == Cache.modified_LRU:
+            pdl.increment_insertion_level(pc,level)
             signature = global_shct.get_signature(pc)
             victim = set[0]
             victim = self._find_victim(set)
             victim.use = min(line.use for line in set)
-            stride = global_shct.stride[signature]
+            victim.level = level
             for line in set:
-                if global_shct.prefetch_state[signature] != -1:
-                    if stride > 64:
-                        if line.level > level and victim.use < line.use:
-                            victim.use = line.use + 1
-                    elif stride <= 64 and stride >= 9:
-                        if line.level < level and victim.use < line.use and 3 > level:
-                            victim.use = line.use + 1
-                    elif stride > 0 and stride <= 8:
-                        if line.level < level and victim.use < line.use and 4 > level:
-                            victim.use = line.use + 1
-                    elif stride < 1:
-                        if line.level < level and victim.use < line.use:
-                            victim.use = line.use + 1
+                pdl_counters = pdl.get_counter(pc, level)
+                counters_slice = pdl_counters[TREE_LEVELS - 4: TREE_LEVELS]
+                sorted_pairs = sorted(enumerate(pdl_counters), key=lambda x: x[1])
+                indices = [idx for idx, val in sorted_pairs]
+                if indices.index(level) >indices.index(line.level):
+                    victim.use = line.use + 1
+
+
 
 
         elif self._replace_pol == Cache.RAND:
             index = random.randint(0, self._mapping_pol - 1)
             victim = set[index]
-
+        elif self._replace_pol == "pdl_aware":
+            pdl.increment_insertion_level(pc, level)
+            victim = None
+            for index in range(len(set)):  # Check if a line in the set is free
+                if set[index].valid == 0:
+                    victim = set[index]
+                    break
+            if victim == None:
+                pdl_counters = pdl.get_counter(pc,level)
+                counters_slice = pdl_counters[TREE_LEVELS-4: TREE_LEVELS]
+                sorted_pairs = sorted(enumerate(counters_slice), key=lambda x: x[1])
+                indices = [idx for idx, val in sorted_pairs]
+                for i in indices:
+                    if victim == None:
+                        for line in set:
+                            line_level = line.level
+                            if line.level == (indices[i] + TREE_LEVELS-4):
+                                victim = line
+                                break
+                if victim == None:
+                    victim = set[4]
         elif self._replace_pol == Cache.ship_plus:
+            pdl.increment_insertion_level(pc, level)
             victim = None
             for index in range(len(set)):  # Check if a line in the set is free
                 if set[index].valid == 0:
@@ -505,7 +526,11 @@ class Cache:
                     self._replace_pol == Cache.LFU or
                     self._replace_pol == Cache.modified_LRU):
                 self._update_use(line, set, level)
+                pdl.increment_level(pc, level)
+            elif (self._replace_pol == "pdl_aware"):
+                pdl.increment_level(pc, level)
             elif (self._replace_pol == "ship_plus"):
+                pdl.increment_level(pc, level)
                 set_idx = (address >> self._set_shift) & ((self._size // (self._block_size * self._mapping_pol)) - 1)
                 if set_idx in self.sampled_sets and (
                         level == TREE_LEVELS - 1 or level == TREE_LEVELS - 2 or level == TREE_LEVELS):
